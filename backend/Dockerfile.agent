@@ -1,0 +1,19 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy agent code
+COPY app/agent/ /app/agent/
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+
+# Expose port for agent communication
+EXPOSE 8080
+
+# Command to run the agent
+CMD ["python", "-m", "agent.main"]

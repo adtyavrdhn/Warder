@@ -5,7 +5,7 @@ Agent service for the Warder application.
 import logging
 import os
 import shutil
-from typing import List, Optional
+from typing import List, Optional, Dict, Any, Tuple
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,8 +13,9 @@ from sqlalchemy import select, update, delete
 
 # from sqlalchemy.exc import SQLAlchemyError
 
-from app.models.agent import Agent, AgentStatus, AgentType
+from app.models.agent import Agent, AgentStatus, AgentType, ContainerStatus
 from app.schemas.agent import AgentCreate, AgentUpdate
+from app.services.container_service import ContainerService
 
 # Try to import Agno for RAG functionality, but handle gracefully if not available
 try:
@@ -43,6 +44,7 @@ class AgentService:
     def __init__(self, db: AsyncSession):
         """Initialize the service with a database session."""
         self.db = db
+        self.container_service = ContainerService()
 
     async def create_agent(self, agent_data: AgentCreate) -> Agent:
         """
@@ -80,6 +82,13 @@ class AgentService:
                     ),
                     **agent_data.config,
                 },
+                container_status=ContainerStatus.NONE,
+                container_config=(
+                    agent_data.container_config.model_dump()
+                    if agent_data.container_config
+                    else {}
+                ),
+                user_id=agent_data.user_id,
             )
 
             # Add to database
@@ -226,8 +235,9 @@ class AgentService:
         Delete an agent.
 
         This method performs the following steps:
-        1. Delete the agent's knowledge base directory
-        2. Delete the agent record from the database
+        1. Delete the agent's container if it exists
+        2. Delete the agent's knowledge base directory
+        3. Delete the agent record from the database
 
         Args:
             agent_id: The agent ID
@@ -239,10 +249,27 @@ class AgentService:
             logger.info(f"Deleting agent with ID: {agent_id}")
 
             # Get agent to check if it exists
-            agent = await self.get_agent(agent_id)
+            query = select(Agent).where(Agent.id == agent_id)
+            result = await self.db.execute(query)
+            agent = result.scalar_one_or_none()
+            
             if not agent:
                 logger.warning(f"Agent with ID {agent_id} not found for deletion")
                 return False
+
+            # Delete agent's container if it exists
+            if agent.container_id:
+                success, message = await self.container_service.delete_container(
+                    agent.container_id
+                )
+                if success:
+                    logger.info(
+                        f"Deleted container for agent {agent_id}: {agent.container_id}"
+                    )
+                else:
+                    logger.warning(
+                        f"Failed to delete container for agent {agent_id}: {message}"
+                    )
 
             # Delete agent's knowledge base directory
             kb_dir = self._get_agent_kb_dir(agent_id)
@@ -251,7 +278,7 @@ class AgentService:
                 logger.info(f"Deleted knowledge base directory: {kb_dir}")
 
             # Delete agent from database
-            await self.db.delete(agent)
+            self.db.delete(agent)
             await self.db.commit()
 
             return True
@@ -259,7 +286,7 @@ class AgentService:
         except Exception as e:
             await self.db.rollback()
             logger.error(f"Error deleting agent {agent_id}: {str(e)}")
-            raise
+            return False
 
     def _get_agent_kb_dir(self, agent_id: UUID) -> str:
         """
@@ -328,3 +355,259 @@ class AgentService:
         except Exception as e:
             logger.error(f"Error initializing RAG agent {agent_id}: {str(e)}")
             raise
+
+    async def create_agent_container(self, agent_id: UUID) -> bool:
+        """
+        Create a container for the agent.
+
+        Args:
+            agent_id: The ID of the agent to create a container for
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            logger.info(f"Creating container for agent: {agent_id}")
+
+            # Get agent
+            agent = await self.get_agent(agent_id)
+            if not agent:
+                logger.warning(
+                    f"Agent with ID {agent_id} not found for creating container"
+                )
+                return False
+
+            # Check if agent already has a container
+            if agent.container_id:
+                logger.warning(f"Agent {agent_id} already has a container")
+                return True
+
+            # Create the container
+            return await self._create_agent_container(agent)
+
+        except Exception as e:
+            logger.error(f"Error creating container for agent {agent_id}: {str(e)}")
+            return False
+
+    async def _create_agent_container(self, agent: Agent) -> bool:
+        """
+        Create a container for the agent.
+
+        Args:
+            agent: The agent to create a container for
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            logger.info(f"Creating container for agent: {agent.id}")
+
+            # Create container
+            success, result = await self.container_service.create_container(agent)
+
+            if not success:
+                logger.error(
+                    f"Failed to create container for agent {agent.id}: {result}"
+                )
+                agent.container_status = ContainerStatus.FAILED
+                await self.db.commit()
+                return False
+
+            # Update agent with container info
+            agent.container_id = result
+            agent.container_status = ContainerStatus.STOPPED
+            await self.db.commit()
+
+            # Start container if auto_start is enabled
+            container_config = agent.container_config or {}
+            if container_config.get("auto_start", True):
+                await self.start_agent_container(agent.id)
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Error creating container for agent {agent.id}: {str(e)}")
+            agent.container_status = ContainerStatus.FAILED
+            await self.db.commit()
+            return False
+
+    async def start_agent_container(self, agent_id: UUID) -> bool:
+        """
+        Start the agent's container.
+
+        Args:
+            agent_id: The agent ID
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            logger.info(f"Starting container for agent: {agent_id}")
+
+            # Get agent
+            query = select(Agent).where(Agent.id == agent_id)
+            result = await self.db.execute(query)
+            agent = result.scalar_one_or_none()
+            
+            if not agent:
+                logger.warning(
+                    f"Agent with ID {agent_id} not found for starting container"
+                )
+                return False
+
+            # Check if agent has a container
+            if not agent.container_id:
+                logger.warning(f"Agent {agent_id} does not have a container")
+                return False
+
+            # Start container
+            success, message = await self.container_service.start_container(
+                agent.container_id
+            )
+
+            if not success:
+                logger.error(
+                    f"Failed to start container for agent {agent_id}: {message}"
+                )
+                agent.container_status = ContainerStatus.FAILED
+                await self.db.commit()
+                return False
+
+            # Update agent container status
+            agent.container_status = ContainerStatus.RUNNING
+            await self.db.commit()
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Error starting container for agent {agent_id}: {str(e)}")
+            return False
+
+    async def stop_agent_container(self, agent_id: UUID) -> bool:
+        """
+        Stop the agent's container.
+
+        Args:
+            agent_id: The agent ID
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            logger.info(f"Stopping container for agent: {agent_id}")
+
+            # Get agent
+            query = select(Agent).where(Agent.id == agent_id)
+            result = await self.db.execute(query)
+            agent = result.scalar_one_or_none()
+            
+            if not agent:
+                logger.warning(
+                    f"Agent with ID {agent_id} not found for stopping container"
+                )
+                return False
+
+            # Check if agent has a container
+            if not agent.container_id:
+                logger.warning(f"Agent {agent_id} does not have a container")
+                return False
+
+            # Stop container
+            success, message = await self.container_service.stop_container(
+                agent.container_id
+            )
+
+            if not success:
+                logger.error(
+                    f"Failed to stop container for agent {agent_id}: {message}"
+                )
+                return False
+
+            # Update agent container status
+            agent.container_status = ContainerStatus.STOPPED
+            await self.db.commit()
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Error stopping container for agent {agent_id}: {str(e)}")
+            return False
+
+    async def get_agent_container_logs(
+        self, agent_id: UUID, lines: int = 100
+    ) -> Optional[str]:
+        """
+        Get the logs of the agent's container.
+
+        Args:
+            agent_id: The agent ID
+            lines: Number of lines to retrieve
+
+        Returns:
+            The container logs if found, None otherwise
+        """
+        try:
+            logger.info(f"Getting logs for agent container: {agent_id}")
+
+            # Get agent
+            query = select(Agent).where(Agent.id == agent_id)
+            result = await self.db.execute(query)
+            agent = result.scalar_one_or_none()
+            
+            if not agent:
+                logger.warning(f"Agent with ID {agent_id} not found for getting logs")
+                return None
+
+            # Check if agent has a container
+            if not agent.container_id:
+                logger.warning(f"Agent {agent_id} does not have a container")
+                return None
+
+            # Get container logs
+            logs = await self.container_service.get_container_logs(
+                agent.container_id, lines
+            )
+
+            return logs
+
+        except Exception as e:
+            logger.error(f"Error getting logs for agent {agent_id}: {str(e)}")
+            return None
+
+    async def get_agent_container_stats(
+        self, agent_id: UUID
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get the stats of the agent's container.
+
+        Args:
+            agent_id: The agent ID
+
+        Returns:
+            The container stats if found, None otherwise
+        """
+        try:
+            logger.info(f"Getting stats for agent container: {agent_id}")
+
+            # Get agent
+            query = select(Agent).where(Agent.id == agent_id)
+            result = await self.db.execute(query)
+            agent = result.scalar_one_or_none()
+            
+            if not agent:
+                logger.warning(f"Agent with ID {agent_id} not found for getting stats")
+                return None
+
+            # Check if agent has a container
+            if not agent.container_id:
+                logger.warning(f"Agent {agent_id} does not have a container")
+                return None
+
+            # Get container stats
+            stats = await self.container_service.get_container_stats(agent.container_id)
+
+            return stats
+
+        except Exception as e:
+            logger.error(f"Error getting stats for agent {agent_id}: {str(e)}")
+            return None

@@ -33,6 +33,17 @@ class AgentStatus(str, enum.Enum):
     DELETED = "deleted"
 
 
+class ContainerStatus(str, enum.Enum):
+    """Enum for container status."""
+
+    NONE = "none"
+    CREATING = "creating"
+    RUNNING = "running"
+    STOPPED = "stopped"
+    FAILED = "failed"
+    DELETED = "deleted"
+
+
 class Agent(Base):
     """Agent model."""
 
@@ -46,6 +57,14 @@ class Agent(Base):
     status = Column(Enum(AgentStatus), nullable=False, default=AgentStatus.CREATING)
     config = Column(JSON, nullable=False, default={})
     user_id = Column(UUID(as_uuid=True), ForeignKey("warder.users.id"), nullable=False)
+    
+    # Container-related fields
+    container_id = Column(String, nullable=True)
+    container_name = Column(String, nullable=True)
+    container_status = Column(Enum(ContainerStatus), nullable=False, default=ContainerStatus.NONE)
+    container_config = Column(JSON, nullable=False, default={})
+    host_port = Column(String, nullable=True)
+    
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime(timezone=True),

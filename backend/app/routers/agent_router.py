@@ -3,10 +3,10 @@ Router for agent-related endpoints.
 """
 
 import logging
-from typing import List, Optional
+from typing import List, Dict
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.agent import AgentCreate, AgentUpdate, AgentResponse
@@ -262,4 +262,187 @@ async def delete_agent(agent_id: UUID, db: AsyncSession = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error deleting agent: {str(e)}",
+        )
+
+
+@router.post("/{agent_id}/start", status_code=status.HTTP_200_OK)
+async def start_agent(
+    agent_id: UUID, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """
+    Start an agent's container.
+
+    Args:
+        agent_id: The agent ID
+        db: Database session
+
+    Returns:
+        A success message
+
+    Raises:
+        HTTPException: If the agent is not found or if there's an error starting the container
+    """
+    try:
+        logger.info(f"Received request to start agent: {agent_id}")
+
+        # Create agent service
+        service = AgentService(db)
+
+        # Start agent container
+        success = await service.start_agent_container(agent_id)
+
+        # Check if operation was successful
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to start agent container for agent {agent_id}",
+            )
+
+        return {"message": f"Agent {agent_id} started successfully"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error starting agent {agent_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error starting agent: {str(e)}",
+        )
+
+
+@router.post("/{agent_id}/stop", status_code=status.HTTP_200_OK)
+async def stop_agent(
+    agent_id: UUID, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """
+    Stop an agent's container.
+
+    Args:
+        agent_id: The agent ID
+        db: Database session
+
+    Returns:
+        A success message
+
+    Raises:
+        HTTPException: If the agent is not found or if there's an error stopping the container
+    """
+    try:
+        logger.info(f"Received request to stop agent: {agent_id}")
+
+        # Create agent service
+        service = AgentService(db)
+
+        # Stop agent container
+        success = await service.stop_agent_container(agent_id)
+
+        # Check if operation was successful
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to stop agent container for agent {agent_id}",
+            )
+
+        return {"message": f"Agent {agent_id} stopped successfully"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error stopping agent {agent_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error stopping agent: {str(e)}",
+        )
+
+
+@router.get("/{agent_id}/logs", status_code=status.HTTP_200_OK)
+async def get_agent_logs(
+    agent_id: UUID, 
+    lines: int = Query(100, ge=1, le=1000),
+    db: AsyncSession = Depends(get_db)
+) -> dict:
+    """
+    Get logs from an agent's container.
+
+    Args:
+        agent_id: The agent ID
+        lines: Number of log lines to retrieve (default: 100, max: 1000)
+        db: Database session
+
+    Returns:
+        The container logs
+
+    Raises:
+        HTTPException: If the agent is not found or if there's an error getting the logs
+    """
+    try:
+        logger.info(f"Received request to get logs for agent: {agent_id}")
+
+        # Create agent service
+        service = AgentService(db)
+
+        # Get agent logs
+        logs = await service.get_agent_container_logs(agent_id, lines)
+
+        # Check if logs were retrieved
+        if logs is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to get logs for agent {agent_id}",
+            )
+
+        return {"logs": logs}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting logs for agent {agent_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting logs: {str(e)}",
+        )
+
+
+@router.get("/{agent_id}/stats", status_code=status.HTTP_200_OK)
+async def get_agent_stats(
+    agent_id: UUID, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """
+    Get stats from an agent's container.
+
+    Args:
+        agent_id: The agent ID
+        db: Database session
+
+    Returns:
+        The container stats
+
+    Raises:
+        HTTPException: If the agent is not found or if there's an error getting the stats
+    """
+    try:
+        logger.info(f"Received request to get stats for agent: {agent_id}")
+
+        # Create agent service
+        service = AgentService(db)
+
+        # Get agent stats
+        stats = await service.get_agent_container_stats(agent_id)
+
+        # Check if stats were retrieved
+        if stats is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to get stats for agent {agent_id}",
+            )
+
+        return {"stats": stats}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting stats for agent {agent_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting stats: {str(e)}",
         )
