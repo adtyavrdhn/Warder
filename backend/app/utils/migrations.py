@@ -60,6 +60,31 @@ async def create_user_tables(db: AsyncSession) -> None:
     """
     logger.info("Creating users table if it doesn't exist")
 
+    # First, create the enum types if they don't exist
+    enum_queries = [
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'userrole') THEN
+                CREATE TYPE userrole AS ENUM ('admin', 'user', 'readonly');
+            END IF;
+        END
+        $$;
+        """,
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'userstatus') THEN
+                CREATE TYPE userstatus AS ENUM ('active', 'inactive', 'suspended', 'pending_verification');
+            END IF;
+        END
+        $$;
+        """
+    ]
+
+    for enum_query in enum_queries:
+        await db.execute(text(enum_query))
+
     query = text(
         """
     CREATE TABLE IF NOT EXISTS warder.users (
@@ -69,8 +94,8 @@ async def create_user_tables(db: AsyncSession) -> None:
         hashed_password VARCHAR NOT NULL,
         first_name VARCHAR,
         last_name VARCHAR,
-        role VARCHAR NOT NULL,
-        status VARCHAR NOT NULL,
+        role userrole NOT NULL,
+        status userstatus NOT NULL,
         verified BOOLEAN NOT NULL DEFAULT FALSE,
         preferences JSONB NOT NULL DEFAULT '{}',
         quota JSONB NOT NULL DEFAULT '{"max_agents": 5, "max_storage_mb": 100, "max_requests_per_day": 1000}',

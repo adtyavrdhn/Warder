@@ -216,17 +216,22 @@ class ContainerService:
             )
 
             # Build command with environment variables
-            cmd = ["podman", "create", "--name", container_name, "--detach"]
+            cmd = ["podman", "create", "--name", container_name]
 
             # Add environment variables
             for key, value in env_vars.items():
                 cmd.extend(["-e", f"{key}={value}"])
 
-            # Use host network instead of a custom network to simplify connectivity
-            cmd.extend(["--network", "host"])
+            # Use bridge network instead of host network for better macOS compatibility
+            cmd.extend(["--network", "bridge"])
             
-            # Skip port mapping when using host network as it's not needed
-            # The container will use the host's network stack directly
+            # Add port mapping for the container
+            # Find an available port
+            host_port = self._find_available_port()
+            cmd.extend(["-p", f"{host_port}:8000/tcp"])
+            
+            # Debug output for troubleshooting
+            logger.info(f"Container create command: {' '.join(cmd)}")
 
             # Add memory limit
             cmd.extend(["--memory", memory_limit])
@@ -259,8 +264,8 @@ class ContainerService:
                 ]
             )
 
-            # Add image
-            cmd.append(image)
+            # Add image with localhost prefix for podman
+            cmd.append(f"localhost/{image}")
 
             # Run the command
             result = subprocess.run(cmd, capture_output=True, text=True, check=True)

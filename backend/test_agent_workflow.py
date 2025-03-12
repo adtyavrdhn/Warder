@@ -213,12 +213,14 @@ def chat_with_agent(access_token: str, agent_id: str) -> bool:
         print(f"Chat response: {json.dumps(chat_response, indent=2)}")
         return True
     else:
-        print(f"Failed to chat with agent using /chat: {response.status_code} - {response.text}")
-        
+        print(
+            f"Failed to chat with agent using /chat: {response.status_code} - {response.text}"
+        )
+
         # Try the /query endpoint as fallback
         print("Trying /query endpoint as fallback...")
         response = make_request("post", f"agents/{agent_id}/query", chat_data, headers)
-        
+
         if response.status_code == 200:
             chat_response = response.json()
             print(f"Query response: {json.dumps(chat_response, indent=2)}")
@@ -229,33 +231,45 @@ def chat_with_agent(access_token: str, agent_id: str) -> bool:
 
 
 def main():
-    """Run the full test workflow."""
-    print_separator("Starting Test Workflow")
+    """Run the focused test workflow for agent creation and chat."""
+    print_separator("Starting Focused Test Workflow")
 
-    # # Step 1: Create user
-    # if not create_user():
-    #     return
-
-    # Step 2: Login
+    # Step 1: Login with existing user
+    print("Logging in with existing user (testuser)...")
     access_token = login()
     if not access_token:
+        print("Login failed. Exiting.")
         return
 
-    # Step 3: Get user ID
+    print(f"Successfully logged in. Access token: {access_token[:10]}...")
+
+    # Step 2: Get user ID
+    print("Getting current user ID...")
     user_id = get_user_id(access_token)
     if not user_id:
+        print("Failed to get user ID. Exiting.")
         return
 
-    # Step 4: Create agent
+    print(f"Current user ID: {user_id}")
+
+    # Step 3: Create agent
+    print("Creating agent...")
     agent_id = create_agent(access_token, user_id)
     if not agent_id:
+        print("Failed to create agent. Exiting.")
         return
 
-    # Step 5: Wait for agent to be ready
+    print(f"Successfully created agent with ID: {agent_id}")
+
+    # Step 4: Wait for agent to be ready
+    print("Waiting for agent to be ready...")
     if not wait_for_agent_ready(access_token, agent_id):
-        return
+        print("Agent failed to become ready. Continuing anyway...")
+    else:
+        print("Agent is ready!")
 
-    # Step 6: Chat with agent
+    # Step 5: Chat with agent
+    print("Sending chat message to agent...")
     chat_with_agent(access_token, agent_id)
 
     print_separator("Test Workflow Completed")

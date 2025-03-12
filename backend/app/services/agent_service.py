@@ -5,7 +5,6 @@ Agent service for the Warder application.
 import logging
 import os
 import shutil
-import json
 from typing import List, Optional, Dict, Any, Tuple
 from uuid import UUID
 
@@ -759,9 +758,9 @@ class AgentService:
                 return None
 
             # Parse port mappings from container info
-            # The format is typically: {'8080/tcp': [{'HostIp': '0.0.0.0', 'HostPort': '9123'}]}
+            # The format is typically: {'8000/tcp': [{'HostIp': '0.0.0.0', 'HostPort': '9123'}]}
             ports = info.get("NetworkSettings", {}).get("Ports", {})
-            container_port = "8080/tcp"  # The port exposed by the agent container
+            container_port = "8000/tcp"  # The port exposed by the agent container
 
             if container_port in ports and ports[container_port]:
                 mapping = ports[container_port][0]
