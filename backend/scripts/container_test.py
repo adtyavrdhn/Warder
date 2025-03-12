@@ -42,7 +42,7 @@ HOST_PORT_RANGE_END = 9500
 CONTAINER_NETWORK = "warder_network"
 KNOWLEDGE_PATH = "/app/data/pdfs"
 PDF_KNOWLEDGE_PATH = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "../../data/pdfs")
+    os.path.join(os.path.dirname(__file__), "../../data/pdfs/docs")
 )
 
 # Vector database configuration
@@ -379,7 +379,7 @@ class ContainerTest:
             # Test chat endpoint with a PDF knowledge-based query
             logger.info("Testing agent chat endpoint with a PDF knowledge-based query")
             knowledge_query = {
-                "content": "What information can you find in the PDF documents?",
+                "content": "What are the RFCs about in the PDF documents?",
                 "role": "user",
             }
             response = requests.post(f"{self.agent_url}/chat", json=knowledge_query)
@@ -396,7 +396,7 @@ class ContainerTest:
             # Test query endpoint directly (our new endpoint)
             logger.info("Testing agent query endpoint with a PDF knowledge-based query")
             query_data = {
-                "query": "Summarize the key information from the PDF documents."
+                "query": "Summarize the key points from the RFC documents in the PDFs."
             }
             response = requests.post(f"{self.agent_url}/query", json=query_data)
 
