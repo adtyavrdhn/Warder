@@ -3,11 +3,12 @@ Router for agent-related endpoints.
 """
 
 import logging
-from typing import List, Dict
+from typing import List, Dict, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel
 
 from app.schemas.agent import AgentCreate, AgentUpdate, AgentResponse
 from app.services.agent_service import AgentService
@@ -18,6 +19,12 @@ logger = logging.getLogger(__name__)
 
 # Create router
 router = APIRouter()
+
+
+# Define query model
+class AgentQuery(BaseModel):
+    """Model for agent query."""
+    query: str
 
 
 @router.post("/", response_model=AgentResponse, status_code=status.HTTP_201_CREATED)
@@ -426,17 +433,34 @@ async def get_agent_stats(
         # Create agent service
         service = AgentService(db)
 
-        # Get agent stats
-        stats = await service.get_agent_container_stats(agent_id)
-
-        # Check if stats were retrieved
-        if stats is None:
+        # Check if agent exists
+        agent = await service.get_agent(agent_id)
+        if not agent:
+            logger.warning(f"Agent with ID {agent_id} not found")
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to get stats for agent {agent_id}",
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Agent with ID {agent_id} not found",
             )
 
-        return {"stats": stats}
+        # Get container ID
+        container_id = agent.container_id
+        if not container_id:
+            logger.warning(f"Agent {agent_id} has no container")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Agent has no container",
+            )
+
+        # Get container stats
+        success, stats = await service.container_service.get_container_stats(container_id)
+        if not success:
+            logger.warning(f"Failed to get stats for container {container_id}: {stats}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to get stats: {stats}",
+            )
+
+        return stats
 
     except HTTPException:
         raise
@@ -445,4 +469,62 @@ async def get_agent_stats(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error getting stats: {str(e)}",
+        )
+
+
+@router.post("/{agent_id}/query", status_code=status.HTTP_200_OK)
+async def query_agent(
+    agent_id: UUID,
+    query_data: AgentQuery,
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, str]:
+    """
+    Query an agent and get a response.
+
+    Args:
+        agent_id: The agent ID
+        query_data: The query data
+        db: Database session
+
+    Returns:
+        The agent's response
+
+    Raises:
+        HTTPException: If the agent is not found or if there's an error querying the agent
+    """
+    try:
+        logger.info(f"Received request to query agent: {agent_id}")
+
+        # Create agent service
+        service = AgentService(db)
+
+        # Check if agent exists
+        agent = await service.get_agent(agent_id)
+        if not agent:
+            logger.warning(f"Agent with ID {agent_id} not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Agent with ID {agent_id} not found",
+            )
+
+        # Get response from agent
+        response = await service.get_agent_response(agent_id, query_data.query)
+
+        # Check if response was generated
+        if response is None:
+            logger.warning(f"Failed to get response from agent {agent_id}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to get response from agent",
+            )
+
+        return {"response": response}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error querying agent {agent_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error querying agent: {str(e)}",
         )

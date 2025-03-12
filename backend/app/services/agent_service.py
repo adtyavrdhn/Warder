@@ -41,6 +41,9 @@ VECTOR_DB_URL = os.getenv(
 class AgentService:
     """Service for agent-related operations."""
 
+    # Class-level dictionary to store agent instances
+    _agent_instances = {}
+
     def __init__(self, db: AsyncSession):
         """Initialize the service with a database session."""
         self.db = db
@@ -354,11 +357,91 @@ class AgentService:
                 search_knowledge=True,
             )
 
+            # Store the agent instance in the class dictionary
+            AgentService._agent_instances[str(agent_id)] = agent
+
             logger.info(f"RAG agent initialized successfully with ID: {agent_id}")
 
         except Exception as e:
             logger.error(f"Error initializing RAG agent {agent_id}: {str(e)}")
             raise
+
+    async def get_agent_instance(self, agent_id: UUID) -> Optional[AgnoAgent]:
+        """
+        Get the agent instance for the given agent ID.
+
+        Args:
+            agent_id: The agent ID
+
+        Returns:
+            The agent instance if found, None otherwise
+        """
+        agent_id_str = str(agent_id)
+
+        # Check if agent instance exists in memory
+        if agent_id_str in AgentService._agent_instances:
+            logger.info(f"Found agent instance in memory for agent {agent_id}")
+            return AgentService._agent_instances[agent_id_str]
+
+        # If not in memory, try to initialize it
+        agent_db = await self.get_agent(agent_id)
+        if not agent_db:
+            logger.warning(f"Agent with ID {agent_id} not found")
+            return None
+
+        # Only initialize if it's a RAG agent
+        if agent_db.type.value == "rag":
+            # Get the agent's knowledge base directory
+            kb_dir = self._get_agent_kb_dir(agent_id)
+
+            # Get knowledge base config from agent config
+            kb_config = agent_db.config.get("knowledge_base", {})
+
+            # Initialize the agent
+            try:
+                await self._initialize_rag_agent(
+                    agent_id=agent_id,
+                    kb_dir=kb_dir,
+                    recreate=kb_config.get("recreate", False),
+                    chunk_size=kb_config.get("chunk_size", 1000),
+                    chunk_overlap=kb_config.get("chunk_overlap", 200),
+                )
+
+                # Return the initialized agent
+                return AgentService._agent_instances.get(agent_id_str)
+            except Exception as e:
+                logger.error(
+                    f"Error initializing agent instance for {agent_id}: {str(e)}"
+                )
+                return None
+        else:
+            logger.warning(f"Agent {agent_id} is not a RAG agent")
+            return None
+
+    async def get_agent_response(self, agent_id: UUID, query: str) -> Optional[str]:
+        """
+        Get a response from the agent for the given query.
+
+        Args:
+            agent_id: The agent ID
+            query: The query to send to the agent
+
+        Returns:
+            The agent's response if successful, None otherwise
+        """
+        try:
+            # Get the agent instance
+            agent_instance = await self.get_agent_instance(agent_id)
+            if not agent_instance:
+                logger.warning(f"No agent instance found for agent {agent_id}")
+                return None
+
+            # Get response from the agent
+            response = agent_instance.print_response(query)
+            return response
+        except Exception as e:
+            logger.error(f"Error getting response from agent {agent_id}: {str(e)}")
+            return None
 
     async def create_agent_container(self, agent_id: UUID) -> bool:
         """
