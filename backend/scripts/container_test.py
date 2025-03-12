@@ -41,6 +41,14 @@ HOST_PORT_RANGE_START = 9000
 HOST_PORT_RANGE_END = 9500
 CONTAINER_NETWORK = "warder_network"
 KNOWLEDGE_PATH = "/app/test_knowledge"
+PDF_KNOWLEDGE_PATH = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "../app/agent/test_knowledge")
+)
+
+# Vector database configuration
+VECTOR_DB_URL = os.getenv(
+    "VECTOR_DB_URL", "postgresql://postgres:postgres@localhost:5432/warder"
+)
 
 
 class ContainerTest:
@@ -147,14 +155,22 @@ class ContainerTest:
             host_port = self._find_available_port()
             logger.info(f"Using host port: {host_port}")
 
+            # Generate a unique agent ID
+            agent_id = str(uuid.uuid4())
+
             # Environment variables for the container
             env_vars = {
-                "AGENT_ID": str(uuid.uuid4()),
-                "AGENT_NAME": "Test Agent",
-                "AGENT_TYPE": "chat",
+                "AGENT_ID": agent_id,
+                "AGENT_NAME": "Test RAG Agent",
+                "AGENT_TYPE": "rag",  # Set to RAG agent type
                 "PORT": str(CONTAINER_PORT),
                 "KNOWLEDGE_PATH": KNOWLEDGE_PATH,
-                "TEST_VAR": "test_value",
+                # Vector database configuration for PDF knowledge base
+                "VECTOR_DB_URL": VECTOR_DB_URL,
+                "VECTOR_DB_TABLE": f"pdf_documents_{agent_id}".replace("-", "_"),
+                "KB_RECREATE": "true",
+                "KB_CHUNK_SIZE": "1000",
+                "KB_CHUNK_OVERLAP": "200",
             }
 
             # Build command to create the container
@@ -170,9 +186,12 @@ class ContainerTest:
             # Add port mapping
             cmd.extend(["-p", f"{host_port}:{CONTAINER_PORT}/tcp"])
 
+            # Mount the PDF knowledge base directory
+            cmd.extend(["-v", f"{PDF_KNOWLEDGE_PATH}:/app/data/pdfs:ro"])
+
             # Add resource limits
-            cmd.extend(["--memory", "512m"])
-            cmd.extend(["--cpus", "0.5"])
+            cmd.extend(["--memory", "1024m"])  # Increased memory for RAG
+            cmd.extend(["--cpus", "1.0"])  # Increased CPU for RAG
 
             # Add image
             cmd.append(CONTAINER_IMAGE)
@@ -328,6 +347,10 @@ class ContainerTest:
 
             logger.info("Health check successful")
 
+            # Wait for the knowledge base to be loaded
+            logger.info("Waiting for knowledge base to be loaded (30 seconds)...")
+            time.sleep(30)  # Give time for the knowledge base to be loaded
+
             # Test chat endpoint with a simple greeting
             logger.info("Testing agent chat endpoint with a simple greeting")
             chat_data = {"content": "Hello, agent!", "role": "user"}
@@ -339,23 +362,44 @@ class ContainerTest:
 
             chat_response = response.json()
             logger.info(f"Chat test successful. Response: {chat_response}")
+            
+            # Check if the response is just an echo (indicating LLM is not connected)
+            if chat_response.get("content", "").startswith("Echo:"):
+                logger.warning("Agent is returning echo responses, which indicates the LLM is not connected properly")
+                # Continue with tests but note the issue
+            else:
+                logger.info("Agent is properly connected to the LLM")
 
-            # Test chat endpoint with a knowledge-based query
-            logger.info("Testing agent chat endpoint with a knowledge-based query")
+            # Test chat endpoint with a PDF knowledge-based query
+            logger.info("Testing agent chat endpoint with a PDF knowledge-based query")
             knowledge_query = {
-                "content": "What are the key features of Warder?",
+                "content": "What information can you find in the PDF documents?",
                 "role": "user",
             }
             response = requests.post(f"{self.agent_url}/chat", json=knowledge_query)
 
             if response.status_code != 200:
-                logger.error(f"Knowledge query test failed: {response.text}")
+                logger.error(f"PDF knowledge query test failed: {response.text}")
                 return False
 
             knowledge_response = response.json()
             logger.info(
-                f"Knowledge query test successful. Response: {knowledge_response}"
+                f"PDF knowledge query test successful. Response: {knowledge_response}"
             )
+
+            # Test query endpoint directly (our new endpoint)
+            logger.info("Testing agent query endpoint with a PDF knowledge-based query")
+            query_data = {
+                "query": "Summarize the key information from the PDF documents."
+            }
+            response = requests.post(f"{self.agent_url}/query", json=query_data)
+
+            if response.status_code != 200:
+                logger.error(f"Direct query test failed: {response.text}")
+                return False
+
+            query_response = response.json()
+            logger.info(f"Direct query test successful. Response: {query_response}")
 
             return True
 

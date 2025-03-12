@@ -48,6 +48,12 @@ class Response(BaseModel):
     role: str = "assistant"
 
 
+class Query(BaseModel):
+    """Query model for direct agent queries."""
+
+    query: str
+
+
 # Initialize agent
 agent = None
 
@@ -149,6 +155,28 @@ async def chat(message: Message):
         # Simple echo response for testing when agent is not available
         logger.warning("Agent not available. Using echo response.")
         return Response(content=f"Echo: {message.content}")
+
+
+@app.post("/query")
+async def query(query_data: Query):
+    """Direct query endpoint for the agent."""
+    logger.info(f"Received query: {query_data.query}")
+
+    # Use the agent to generate a response if available
+    if agent and AGNO_AVAILABLE:
+        try:
+            # Get response from the agent
+            agent_response = agent.print_response(query_data.query)
+            logger.info(f"Agent response to query: {agent_response}")
+            return {"response": agent_response}
+        except Exception as e:
+            logger.error(f"Error getting response from agent for query: {str(e)}")
+            # Return error message
+            return {"error": str(e)}
+    else:
+        # Simple echo response for testing when agent is not available
+        logger.warning("Agent not available for query. Using echo response.")
+        return {"response": f"Echo: {query_data.query}"}
 
 
 @app.get("/info")
