@@ -1,0 +1,3 @@
+"""
+Document Processor application package.
+"""

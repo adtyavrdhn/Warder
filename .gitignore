@@ -1,0 +1,78 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.env
+*.env
+*.venv
+Pipfile.lock
+poetry.lock
+
+# Python package files
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Logs and runtime files
+logs/
+*.log
+*.out
+*.err
+nohup.out
+
+# Database and cache files
+*.sqlite3
+*.db
+*.sqlite
+__pycache__/
+
+# Docker files
+.dockerignore
+docker-compose.override.yml
+docker-compose.yml
+Dockerfile
+docker-*
+
+# Kubernetes and Helm
+*.yaml
+*.yml
+helm-chart/
+k8s-manifests/
+secrets/
+config/
+*.crt
+*.key
+
+# VS Code and JetBrains IDEs
+.vscode/
+.idea/
+
+# Editor backups
+*.swp
+*.swo
+*.bak
+*.orig
+
+# Pytest and testing
+.coverage
+pytest_cache/
+htmlcov/
+junitxml/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Temporary files
+tmp/
+temp/
+.cache/
+*.pid
+*.sock
+
+# Local environment overrides
+.envrc

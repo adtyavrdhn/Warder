@@ -1,0 +1,3 @@
+"""
+Agent Manager application package.
+"""
