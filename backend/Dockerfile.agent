@@ -2,18 +2,29 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install system dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    git \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+RUN pip install --no-cache-dir fastapi uvicorn pydantic requests
+
+# Install Agno from GitHub
+RUN pip install agno==1.1.6
 
 # Copy agent code
-COPY app/agent/ /app/agent/
+COPY app/agent/ /app/
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
+ENV PORT=8080
 
 # Expose port for agent communication
 EXPOSE 8080
 
 # Command to run the agent
-CMD ["python", "-m", "agent.main"]
+CMD ["python", "main.py"]

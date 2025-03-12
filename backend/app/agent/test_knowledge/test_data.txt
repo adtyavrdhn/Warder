@@ -1,0 +1,12 @@
+This is a test knowledge file for the Warder agent.
+
+The Warder project is an AI agent platform that allows users to create and manage AI agents.
+
+Key features of Warder:
+1. User registration and authentication
+2. Agent creation and management
+3. Agent containerization using Podman
+4. Knowledge base management for agents
+5. API for agent communication
+
+Warder uses FastAPI for the backend and Podman for containerization.

@@ -1,6 +1,6 @@
 """
 Container service for the Warder application.
-Handles Docker container operations for agent hosting.
+Handles Podman container operations for agent hosting.
 """
 
 import logging
@@ -8,7 +8,8 @@ import os
 import re
 import random
 import string
-import docker
+import subprocess
+import json
 from typing import Dict, List, Optional, Tuple, Any
 
 from app.models.agent import Agent
@@ -16,13 +17,16 @@ from app.models.agent import Agent
 # Configure logger
 logger = logging.getLogger(__name__)
 
-# Docker client
+# Check if Podman is available
 try:
-    docker_client = docker.from_env()
-    DOCKER_AVAILABLE = True
-except Exception as e:
-    logger.warning(f"Docker client initialization failed: {str(e)}")
-    DOCKER_AVAILABLE = False
+    result = subprocess.run(
+        ["podman", "--version"], capture_output=True, text=True, check=True
+    )
+    PODMAN_AVAILABLE = True
+    logger.info(f"Podman version: {result.stdout.strip()}")
+except (subprocess.SubprocessError, FileNotFoundError) as e:
+    logger.warning(f"Podman client initialization failed: {str(e)}")
+    PODMAN_AVAILABLE = False
 
 # Default port range for agent containers
 DEFAULT_PORT_RANGE_START = int(os.getenv("AGENT_PORT_RANGE_START", "9000"))
@@ -40,9 +44,9 @@ class ContainerService:
 
     def __init__(self):
         """Initialize the container service."""
-        if not DOCKER_AVAILABLE:
+        if not PODMAN_AVAILABLE:
             logger.warning(
-                "Docker is not available. Container operations will be limited."
+                "Podman is not available. Container operations will be limited."
             )
             return
 
@@ -50,22 +54,29 @@ class ContainerService:
         self._ensure_network()
 
     def _ensure_network(self) -> None:
-        """Ensure the Docker network exists."""
-        if not DOCKER_AVAILABLE:
+        """Ensure the Podman network exists."""
+        if not PODMAN_AVAILABLE:
             return
 
         try:
-            networks = docker_client.networks.list(names=[DEFAULT_NETWORK])
-            if not networks:
-                logger.info(f"Creating Docker network: {DEFAULT_NETWORK}")
-                docker_client.networks.create(
-                    name=DEFAULT_NETWORK,
-                    driver="bridge",
-                    check_duplicate=True,
+            # Check if network exists
+            result = subprocess.run(
+                ["podman", "network", "inspect", DEFAULT_NETWORK],
+                capture_output=True,
+                text=True,
+            )
+
+            if result.returncode != 0:
+                logger.info(f"Creating Podman network: {DEFAULT_NETWORK}")
+                subprocess.run(
+                    ["podman", "network", "create", DEFAULT_NETWORK],
+                    check=True,
+                    capture_output=True,
+                    text=True,
                 )
-                logger.info(f"Docker network created: {DEFAULT_NETWORK}")
-        except Exception as e:
-            logger.error(f"Error ensuring Docker network: {str(e)}")
+                logger.info(f"Podman network created: {DEFAULT_NETWORK}")
+        except subprocess.SubprocessError as e:
+            logger.error(f"Error ensuring Podman network: {str(e)}")
 
     def _generate_container_name(self, agent_name: str) -> str:
         """
@@ -92,36 +103,47 @@ class ContainerService:
         Returns:
             An available port
         """
-        if not DOCKER_AVAILABLE:
-            # Return a random port in the range if Docker is not available
+        if not PODMAN_AVAILABLE:
+            # Return a random port in the range if Podman is not available
             return random.randint(DEFAULT_PORT_RANGE_START, DEFAULT_PORT_RANGE_END)
 
         # Get all running containers
-        containers = docker_client.containers.list()
+        try:
+            result = subprocess.run(
+                ["podman", "ps", "--format", "{{.Ports}}"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
 
-        # Extract all used ports
-        used_ports = set()
-        for container in containers:
-            for port_config in container.ports.values():
-                if port_config:
-                    for binding in port_config:
-                        if "HostPort" in binding:
-                            used_ports.add(int(binding["HostPort"]))
+            # Extract all used ports
+            used_ports = set()
+            for line in result.stdout.splitlines():
+                if line:
+                    # Parse port mappings like "0.0.0.0:9000->8000/tcp"
+                    port_mappings = line.split(",")
+                    for mapping in port_mappings:
+                        match = re.search(r":(\d+)->", mapping)
+                        if match:
+                            used_ports.add(int(match.group(1)))
 
-        # Find an available port in the range
-        for port in range(DEFAULT_PORT_RANGE_START, DEFAULT_PORT_RANGE_END + 1):
-            if port not in used_ports:
-                return port
+            # Find an available port in the range
+            for port in range(DEFAULT_PORT_RANGE_START, DEFAULT_PORT_RANGE_END + 1):
+                if port not in used_ports:
+                    return port
 
-        # If all ports are used, return a random port (will fail if actually used)
-        logger.warning(
-            "All ports in the configured range are used. Returning a random port."
-        )
+            # If all ports are used, return a random port (will fail if actually used)
+            logger.warning(
+                "All ports in the configured range are used. Returning a random port."
+            )
+        except subprocess.SubprocessError as e:
+            logger.error(f"Error finding available port: {str(e)}")
+
         return random.randint(DEFAULT_PORT_RANGE_START, DEFAULT_PORT_RANGE_END)
 
     async def create_container(self, agent: Agent) -> Tuple[bool, str]:
         """
-        Create a Docker container for the agent.
+        Create a Podman container for the agent.
 
         Args:
             agent: The agent to create a container for
@@ -129,8 +151,8 @@ class ContainerService:
         Returns:
             A tuple of (success, message)
         """
-        if not DOCKER_AVAILABLE:
-            return False, "Docker is not available"
+        if not PODMAN_AVAILABLE:
+            return False, "Podman is not available"
 
         try:
             # Generate a unique container name
@@ -161,32 +183,58 @@ class ContainerService:
             logger.info(
                 f"Creating container for agent {agent.id} with name {container_name}"
             )
-            container = docker_client.containers.create(
-                image=image,
-                name=container_name,
-                detach=True,
-                environment=env_vars,
-                network=DEFAULT_NETWORK,
-                ports={"8000/tcp": host_port},
-                mem_limit=memory_limit,
-                cpu_quota=int(cpu_limit * 100000),  # Docker uses microseconds
-                restart_policy={"Name": "unless-stopped"},
-                labels={
-                    "warder.agent.id": str(agent.id),
-                    "warder.agent.name": agent.name,
-                    "warder.agent.user_id": str(agent.user_id),
-                },
+
+            # Build command with environment variables
+            cmd = ["podman", "create", "--name", container_name, "--detach"]
+
+            # Add environment variables
+            for key, value in env_vars.items():
+                cmd.extend(["-e", f"{key}={value}"])
+
+            # Add network
+            cmd.extend(["--network", DEFAULT_NETWORK])
+
+            # Add port mapping
+            cmd.extend(["-p", f"{host_port}:8000/tcp"])
+
+            # Add memory limit
+            cmd.extend(["--memory", memory_limit])
+
+            # Add CPU limit (Podman uses --cpus instead of Docker's cpu-quota)
+            cmd.extend(["--cpus", str(cpu_limit)])
+
+            # Add restart policy
+            cmd.extend(["--restart", "unless-stopped"])
+
+            # Add labels
+            cmd.extend(
+                [
+                    "--label",
+                    f"warder.agent.id={str(agent.id)}",
+                    "--label",
+                    f"warder.agent.name={agent.name}",
+                    "--label",
+                    f"warder.agent.user_id={str(agent.user_id)}",
+                ]
             )
 
-            return True, container.id
+            # Add image
+            cmd.append(image)
 
-        except Exception as e:
+            # Run the command
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+
+            # Return the container ID
+            container_id = result.stdout.strip()
+            return True, container_id
+
+        except subprocess.SubprocessError as e:
             logger.error(f"Error creating container for agent {agent.id}: {str(e)}")
             return False, str(e)
 
     async def start_container(self, container_id: str) -> Tuple[bool, str]:
         """
-        Start a Docker container.
+        Start a Podman container.
 
         Args:
             container_id: The container ID
@@ -194,21 +242,25 @@ class ContainerService:
         Returns:
             A tuple of (success, message)
         """
-        if not DOCKER_AVAILABLE:
-            return False, "Docker is not available"
+        if not PODMAN_AVAILABLE:
+            return False, "Podman is not available"
 
         try:
-            container = docker_client.containers.get(container_id)
-            container.start()
+            subprocess.run(
+                ["podman", "start", container_id],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
             logger.info(f"Container {container_id} started")
             return True, "Container started"
-        except Exception as e:
+        except subprocess.SubprocessError as e:
             logger.error(f"Error starting container {container_id}: {str(e)}")
             return False, str(e)
 
     async def stop_container(self, container_id: str) -> Tuple[bool, str]:
         """
-        Stop a Docker container.
+        Stop a Podman container.
 
         Args:
             container_id: The container ID
@@ -216,21 +268,25 @@ class ContainerService:
         Returns:
             A tuple of (success, message)
         """
-        if not DOCKER_AVAILABLE:
-            return False, "Docker is not available"
+        if not PODMAN_AVAILABLE:
+            return False, "Podman is not available"
 
         try:
-            container = docker_client.containers.get(container_id)
-            container.stop(timeout=10)  # Give it 10 seconds to stop gracefully
+            subprocess.run(
+                ["podman", "stop", "--time", "10", container_id],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
             logger.info(f"Container {container_id} stopped")
             return True, "Container stopped"
-        except Exception as e:
+        except subprocess.SubprocessError as e:
             logger.error(f"Error stopping container {container_id}: {str(e)}")
             return False, str(e)
 
     async def delete_container(self, container_id: str) -> Tuple[bool, str]:
         """
-        Delete a Docker container.
+        Delete a Podman container.
 
         Args:
             container_id: The container ID
@@ -238,27 +294,43 @@ class ContainerService:
         Returns:
             A tuple of (success, message)
         """
-        if not DOCKER_AVAILABLE:
-            return False, "Docker is not available"
+        if not PODMAN_AVAILABLE:
+            return False, "Podman is not available"
 
         try:
-            container = docker_client.containers.get(container_id)
+            # Check if container is running
+            result = subprocess.run(
+                ["podman", "inspect", "--format", "{{.State.Running}}", container_id],
+                capture_output=True,
+                text=True,
+            )
 
             # Stop the container if it's running
-            if container.status == "running":
-                container.stop(timeout=10)
+            if result.stdout.strip() == "true":
+                subprocess.run(
+                    ["podman", "stop", "--time", "10", container_id],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
 
             # Remove the container
-            container.remove(force=True)
+            subprocess.run(
+                ["podman", "rm", "--force", container_id],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
             logger.info(f"Container {container_id} deleted")
             return True, "Container deleted"
-        except Exception as e:
+        except subprocess.SubprocessError as e:
             logger.error(f"Error deleting container {container_id}: {str(e)}")
             return False, str(e)
 
     async def get_container_status(self, container_id: str) -> Optional[str]:
         """
-        Get the status of a Docker container.
+        Get the status of a Podman container.
 
         Args:
             container_id: The container ID
@@ -266,13 +338,20 @@ class ContainerService:
         Returns:
             The container status if found, None otherwise
         """
-        if not DOCKER_AVAILABLE:
+        if not PODMAN_AVAILABLE:
             return None
 
         try:
-            container = docker_client.containers.get(container_id)
-            return container.status
-        except Exception as e:
+            result = subprocess.run(
+                ["podman", "inspect", "--format", "{{.State.Status}}", container_id],
+                capture_output=True,
+                text=True,
+            )
+
+            if result.returncode == 0:
+                return result.stdout.strip()
+            return None
+        except subprocess.SubprocessError as e:
             logger.error(f"Error getting container status for {container_id}: {str(e)}")
             return None
 
@@ -280,7 +359,7 @@ class ContainerService:
         self, container_id: str, lines: int = 100
     ) -> Optional[str]:
         """
-        Get the logs of a Docker container.
+        Get the logs of a Podman container.
 
         Args:
             container_id: The container ID
@@ -289,14 +368,20 @@ class ContainerService:
         Returns:
             The container logs if found, None otherwise
         """
-        if not DOCKER_AVAILABLE:
+        if not PODMAN_AVAILABLE:
             return None
 
         try:
-            container = docker_client.containers.get(container_id)
-            logs = container.logs(tail=lines, timestamps=True).decode("utf-8")
-            return logs
-        except Exception as e:
+            result = subprocess.run(
+                ["podman", "logs", "--tail", str(lines), "--timestamps", container_id],
+                capture_output=True,
+                text=True,
+            )
+
+            if result.returncode == 0:
+                return result.stdout
+            return None
+        except subprocess.SubprocessError as e:
             logger.error(f"Error getting container logs for {container_id}: {str(e)}")
             return None
 
@@ -307,37 +392,68 @@ class ContainerService:
         Returns:
             A list of container information dictionaries
         """
-        if not DOCKER_AVAILABLE:
+        if not PODMAN_AVAILABLE:
             return []
 
         try:
-            containers = docker_client.containers.list(
-                all=True, filters={"label": "warder.agent.id"}
+            # Get all containers with the warder.agent.id label
+            result = subprocess.run(
+                [
+                    "podman",
+                    "ps",
+                    "--all",
+                    "--filter",
+                    "label=warder.agent.id",
+                    "--format",
+                    "json",
+                ],
+                capture_output=True,
+                text=True,
             )
+
+            if result.returncode != 0:
+                return []
+
+            containers = json.loads(result.stdout)
 
             result = []
             for container in containers:
+                # Extract port mappings
+                ports = {}
+                if "Ports" in container:
+                    for port_mapping in container["Ports"]:
+                        parts = port_mapping.split("->")
+                        if len(parts) == 2:
+                            host_part = parts[0].strip()
+                            container_part = parts[1].strip()
+                            ports[container_part] = [
+                                {"HostPort": host_part.split(":")[-1]}
+                            ]
+
+                # Extract labels
+                labels = container.get("Labels", {})
+
                 result.append(
                     {
-                        "id": container.id,
-                        "name": container.name,
-                        "status": container.status,
-                        "agent_id": container.labels.get("warder.agent.id"),
-                        "agent_name": container.labels.get("warder.agent.name"),
-                        "user_id": container.labels.get("warder.agent.user_id"),
-                        "created": container.attrs.get("Created"),
-                        "ports": container.ports,
+                        "id": container["Id"],
+                        "name": container["Names"][0],
+                        "status": container["State"],
+                        "agent_id": labels.get("warder.agent.id"),
+                        "agent_name": labels.get("warder.agent.name"),
+                        "user_id": labels.get("warder.agent.user_id"),
+                        "created": container["Created"],
+                        "ports": ports,
                     }
                 )
 
             return result
-        except Exception as e:
+        except (subprocess.SubprocessError, json.JSONDecodeError) as e:
             logger.error(f"Error listing agent containers: {str(e)}")
             return []
 
     async def get_container_stats(self, container_id: str) -> Optional[Dict[str, Any]]:
         """
-        Get the stats of a Docker container.
+        Get the stats of a Podman container.
 
         Args:
             container_id: The container ID
@@ -345,26 +461,21 @@ class ContainerService:
         Returns:
             The container stats if found, None otherwise
         """
-        if not DOCKER_AVAILABLE:
+        if not PODMAN_AVAILABLE:
             return None
 
         try:
-            container = docker_client.containers.get(container_id)
-            stats = container.stats(stream=False)
+            result = subprocess.run(
+                ["podman", "stats", "--no-stream", "--format", "json", container_id],
+                capture_output=True,
+                text=True,
+            )
 
-            # Extract relevant stats
-            cpu_stats = stats.get("cpu_stats", {})
-            memory_stats = stats.get("memory_stats", {})
-            network_stats = stats.get("networks", {}).get("eth0", {})
-
-            return {
-                "cpu_usage": cpu_stats.get("cpu_usage", {}).get("total_usage", 0),
-                "system_cpu_usage": cpu_stats.get("system_cpu_usage", 0),
-                "memory_usage": memory_stats.get("usage", 0),
-                "memory_limit": memory_stats.get("limit", 0),
-                "network_rx_bytes": network_stats.get("rx_bytes", 0),
-                "network_tx_bytes": network_stats.get("tx_bytes", 0),
-            }
-        except Exception as e:
+            if result.returncode == 0:
+                stats = json.loads(result.stdout)
+                if stats and len(stats) > 0:
+                    return stats[0]
+            return None
+        except (subprocess.SubprocessError, json.JSONDecodeError) as e:
             logger.error(f"Error getting container stats for {container_id}: {str(e)}")
             return None
