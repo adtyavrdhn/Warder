@@ -189,8 +189,10 @@ async def login_for_access_token(
 
 from pydantic import BaseModel
 
+
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
+
 
 @router.post("/refresh")
 async def refresh_token(
@@ -215,7 +217,9 @@ async def refresh_token(
         from app.utils.auth import SECRET_KEY, ALGORITHM
 
         try:
-            payload = jwt.decode(token_data.refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
+            payload = jwt.decode(
+                token_data.refresh_token, SECRET_KEY, algorithms=[ALGORITHM]
+            )
             user_id: str = payload.get("sub")
             if user_id is None:
                 raise HTTPException(

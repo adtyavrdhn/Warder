@@ -17,6 +17,7 @@ from app.utils.database import get_db
 # Configure logger
 logger = logging.getLogger(__name__)
 
+
 # Create router
 router = APIRouter()
 
@@ -26,6 +27,26 @@ class AgentQuery(BaseModel):
     """Model for agent query."""
 
     query: str
+
+
+async def get_agent_response(self, agent_id: UUID, message: dict) -> Dict[str, str]:
+    """Get a response from an agent."""
+    agent = await self.db.get(Agent, agent_id)
+
+    if settings.USE_CONTAINERS:
+        # Container mode - HTTP request to container
+        if not agent.container_id or agent.container_status != "running":
+            # Start container if needed
+            await self.start_agent(agent_id)
+
+        # Forward request to container
+        response = await self._forward_to_container(agent, "/chat", message)
+        return response
+    else:
+        # In-process mode - direct call
+        agent_instance = await self.get_agent_instance(agent_id)
+        response = agent_instance.get_response(message["content"])
+        return {"content": response, "role": "assistant"}
 
 
 @router.post("/", response_model=AgentResponse, status_code=status.HTTP_201_CREATED)
@@ -75,6 +96,22 @@ async def create_agent(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error creating agent: {str(e)}",
         )
+
+
+@router.post("/{agent_id}/chat", status_code=status.HTTP_200_OK)
+async def chat_with_agent(
+    agent_id: UUID,
+    message: dict,
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, str]:
+    """Chat with an agent."""
+    # Get agent from database
+    agent = await db.get(Agent, agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    # Get response from agent (either container or in-process)
+    return await agent_service.get_agent_response(agent_id, message)
 
 
 @router.get("/{agent_id}", response_model=AgentResponse)
