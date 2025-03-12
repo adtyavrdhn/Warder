@@ -178,7 +178,7 @@ class ContainerService:
                     "AGENT_TYPE": agent.type.value,
                 }
             )
-            
+
             # Add LLM model configuration
             model_config = agent.config.get("model", {})
             if model_config:
@@ -187,21 +187,24 @@ class ContainerService:
                 # Add API key if available
                 if "api_key" in model_config:
                     env_vars["LLM_API_KEY"] = model_config["api_key"]
-            
+
             # Add knowledge base configuration for RAG agents
             if agent.type.value == "rag":
                 # Get knowledge base config from agent config
                 kb_config = agent.config.get("knowledge_base", {})
-                
+
                 # Set knowledge path to the mounted directory in the container
                 env_vars["KNOWLEDGE_PATH"] = "/app/data/pdfs"
-                
+
                 # Set vector database configuration
-                env_vars["VECTOR_DB_URL"] = VECTOR_DB_URL
+                # Use host.docker.internal to access the host from the container
+                env_vars["VECTOR_DB_URL"] = (
+                    "postgresql://postgres:postgres@host.docker.internal:5432/warder"
+                )
                 # Create a table name for this agent
                 table_name = f"pdf_documents_{agent.id}".replace("-", "_")
                 env_vars["VECTOR_DB_TABLE"] = table_name
-                
+
                 # Set knowledge base parameters
                 env_vars["KB_RECREATE"] = str(kb_config.get("recreate", False)).lower()
                 env_vars["KB_CHUNK_SIZE"] = str(kb_config.get("chunk_size", 1000))
@@ -219,11 +222,11 @@ class ContainerService:
             for key, value in env_vars.items():
                 cmd.extend(["-e", f"{key}={value}"])
 
-            # Add network
-            cmd.extend(["--network", DEFAULT_NETWORK])
-
-            # Add port mapping
-            cmd.extend(["-p", f"{host_port}:8080/tcp"])
+            # Use host network instead of a custom network to simplify connectivity
+            cmd.extend(["--network", "host"])
+            
+            # Skip port mapping when using host network as it's not needed
+            # The container will use the host's network stack directly
 
             # Add memory limit
             cmd.extend(["--memory", memory_limit])
@@ -233,15 +236,15 @@ class ContainerService:
 
             # Add restart policy
             cmd.extend(["--restart", "unless-stopped"])
-            
+
             # Mount knowledge base directory for RAG agents
             if agent.type.value == "rag":
-                # Get the agent's knowledge base directory
+                # Get the agent's knowledge base directory with absolute path
                 kb_base = os.getenv("KNOWLEDGE_BASE_DIR", "data/knowledge_base")
-                kb_dir = os.path.join(kb_base, str(agent.id))
+                kb_dir = os.path.join(os.getcwd(), kb_base, str(agent.id))
                 # Ensure the directory exists
                 os.makedirs(kb_dir, exist_ok=True)
-                # Mount the directory to the container
+                # Mount the directory to the container with absolute path
                 cmd.extend(["-v", f"{kb_dir}:/app/data/pdfs:ro"])
 
             # Add labels
@@ -489,7 +492,9 @@ class ContainerService:
             logger.error(f"Error listing agent containers: {str(e)}")
             return []
 
-    async def inspect_container(self, container_id: str) -> Tuple[bool, Optional[Dict[str, Any]]]:
+    async def inspect_container(
+        self, container_id: str
+    ) -> Tuple[bool, Optional[Dict[str, Any]]]:
         """
         Inspect a Podman container to get detailed information.
 
@@ -510,12 +515,18 @@ class ContainerService:
             )
 
             if result.returncode != 0:
-                logger.error(f"Error inspecting container {container_id}: {result.stderr}")
+                logger.error(
+                    f"Error inspecting container {container_id}: {result.stderr}"
+                )
                 return False, None
 
             # Parse the JSON output
             container_info = json.loads(result.stdout)
-            if not container_info or not isinstance(container_info, list) or len(container_info) == 0:
+            if (
+                not container_info
+                or not isinstance(container_info, list)
+                or len(container_info) == 0
+            ):
                 logger.error(f"Invalid container info format for {container_id}")
                 return False, None
 
