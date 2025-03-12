@@ -24,6 +24,7 @@ router = APIRouter()
 # Define query model
 class AgentQuery(BaseModel):
     """Model for agent query."""
+
     query: str
 
 
@@ -273,9 +274,7 @@ async def delete_agent(agent_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{agent_id}/start", status_code=status.HTTP_200_OK)
-async def start_agent(
-    agent_id: UUID, db: AsyncSession = Depends(get_db)
-) -> dict:
+async def start_agent(agent_id: UUID, db: AsyncSession = Depends(get_db)) -> dict:
     """
     Start an agent's container.
 
@@ -318,9 +317,7 @@ async def start_agent(
 
 
 @router.post("/{agent_id}/stop", status_code=status.HTTP_200_OK)
-async def stop_agent(
-    agent_id: UUID, db: AsyncSession = Depends(get_db)
-) -> dict:
+async def stop_agent(agent_id: UUID, db: AsyncSession = Depends(get_db)) -> dict:
     """
     Stop an agent's container.
 
@@ -364,9 +361,9 @@ async def stop_agent(
 
 @router.get("/{agent_id}/logs", status_code=status.HTTP_200_OK)
 async def get_agent_logs(
-    agent_id: UUID, 
+    agent_id: UUID,
     lines: int = Query(100, ge=1, le=1000),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
     """
     Get logs from an agent's container.
@@ -411,9 +408,7 @@ async def get_agent_logs(
 
 
 @router.get("/{agent_id}/stats", status_code=status.HTTP_200_OK)
-async def get_agent_stats(
-    agent_id: UUID, db: AsyncSession = Depends(get_db)
-) -> dict:
+async def get_agent_stats(agent_id: UUID, db: AsyncSession = Depends(get_db)) -> dict:
     """
     Get stats from an agent's container.
 
@@ -452,7 +447,9 @@ async def get_agent_stats(
             )
 
         # Get container stats
-        success, stats = await service.container_service.get_container_stats(container_id)
+        success, stats = await service.container_service.get_container_stats(
+            container_id
+        )
         if not success:
             logger.warning(f"Failed to get stats for container {container_id}: {stats}")
             raise HTTPException(
