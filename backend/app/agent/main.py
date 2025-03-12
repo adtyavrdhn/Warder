@@ -108,14 +108,34 @@ def initialize_agent():
             )
             knowledge_base.load(recreate=recreate)
 
+        # Get LLM configuration from environment variables
+        llm_provider = os.environ.get("LLM_PROVIDER", "")
+        llm_model = os.environ.get("LLM_MODEL", "")
+        llm_api_key = os.environ.get("LLM_API_KEY", "")
+        
         # Initialize agent
         logger.info(
             f"Initializing agent: {agent_name} (ID: {agent_id}, Type: {agent_type})"
         )
-        agent = Agent(
-            knowledge=knowledge_base,
-            search_knowledge=True if knowledge_base else False,
-        )
+        
+        # Check if we have LLM configuration
+        if llm_provider and llm_model and llm_api_key:
+            logger.info(f"Using LLM provider: {llm_provider}, model: {llm_model}")
+            
+            # Initialize agent with LLM configuration
+            agent = Agent(
+                knowledge=knowledge_base,
+                search_knowledge=True if knowledge_base else False,
+                llm_provider=llm_provider,
+                llm_model=llm_model,
+                llm_api_key=llm_api_key,
+            )
+        else:
+            logger.warning("No LLM configuration found, agent will use echo responses")
+            agent = Agent(
+                knowledge=knowledge_base,
+                search_knowledge=True if knowledge_base else False,
+            )
 
         logger.info("Agent initialized successfully")
     except Exception as e:

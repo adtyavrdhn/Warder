@@ -179,6 +179,15 @@ class ContainerService:
                 }
             )
             
+            # Add LLM model configuration
+            model_config = agent.config.get("model", {})
+            if model_config:
+                env_vars["LLM_PROVIDER"] = model_config.get("provider", "openai")
+                env_vars["LLM_MODEL"] = model_config.get("name", "gpt-3.5-turbo")
+                # Add API key if available
+                if "api_key" in model_config:
+                    env_vars["LLM_API_KEY"] = model_config["api_key"]
+            
             # Add knowledge base configuration for RAG agents
             if agent.type.value == "rag":
                 # Get knowledge base config from agent config

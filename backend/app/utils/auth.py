@@ -141,12 +141,8 @@ async def get_current_user(
     if user is None:
         raise credentials_exception
 
-    # Check if user is active
-    if user.status != UserStatus.ACTIVE:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"User account is {user.status}",
-        )
+    # No longer checking user status - all users are allowed access
+    # Keeping this comment for future reference
 
     return user
 

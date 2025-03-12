@@ -79,8 +79,8 @@ async def register_user(
             first_name=user_data.first_name,
             last_name=user_data.last_name,
             role=user_data.role,
-            status=UserStatus.PENDING_VERIFICATION,
-            verified=False,
+            status=UserStatus.ACTIVE,  # Set status as active by default
+            verified=True,  # Set verified as true by default
         )
 
         # Add to database
