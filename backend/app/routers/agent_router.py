@@ -33,20 +33,13 @@ async def get_agent_response(self, agent_id: UUID, message: dict) -> Dict[str, s
     """Get a response from an agent."""
     agent = await self.db.get(Agent, agent_id)
 
-    if settings.USE_CONTAINERS:
-        # Container mode - HTTP request to container
-        if not agent.container_id or agent.container_status != "running":
-            # Start container if needed
-            await self.start_agent(agent_id)
+    if not agent.container_id or agent.container_status != "running":
+        # Start container if needed
+        await self.start_agent(agent_id)
 
-        # Forward request to container
-        response = await self._forward_to_container(agent, "/chat", message)
-        return response
-    else:
-        # In-process mode - direct call
-        agent_instance = await self.get_agent_instance(agent_id)
-        response = agent_instance.get_response(message["content"])
-        return {"content": response, "role": "assistant"}
+    # Forward request to container
+    response = await self._forward_to_container(agent, "/chat", message)
+    return response
 
 
 @router.post("/", response_model=AgentResponse, status_code=status.HTTP_201_CREATED)

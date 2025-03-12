@@ -5,11 +5,13 @@ Agent service for the Warder application.
 import logging
 import os
 import shutil
+import json
 from typing import List, Optional, Dict, Any, Tuple
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
+import httpx
 
 # from sqlalchemy.exc import SQLAlchemyError
 
@@ -420,7 +422,7 @@ class AgentService:
 
     async def get_agent_response(self, agent_id: UUID, query: str) -> Optional[str]:
         """
-        Get a response from the agent for the given query.
+        Get a response from the agent for the given query by communicating with its container.
 
         Args:
             agent_id: The agent ID
@@ -430,15 +432,54 @@ class AgentService:
             The agent's response if successful, None otherwise
         """
         try:
-            # Get the agent instance
-            agent_instance = await self.get_agent_instance(agent_id)
-            if not agent_instance:
-                logger.warning(f"No agent instance found for agent {agent_id}")
+            # Get agent from database
+            agent = await self.get_agent(agent_id)
+            if not agent:
+                logger.warning(f"Agent with ID {agent_id} not found")
                 return None
 
-            # Get response from the agent
-            response = agent_instance.print_response(query)
-            return response
+            # Check if agent has a container
+            if not agent.container_id:
+                logger.warning(f"Agent {agent_id} does not have a container")
+                return None
+
+            # Check if container is running and start it if needed
+            if agent.container_status != "RUNNING":
+                logger.info(f"Starting container for agent {agent_id}")
+                success = await self.start_agent_container(agent_id)
+                if not success:
+                    logger.error(f"Failed to start container for agent {agent_id}")
+                    return None
+                
+                # Refresh agent data
+                agent = await self.get_agent(agent_id)
+
+            # Get container port mapping
+            container_status = await self.container_service.get_container_status(agent.container_id)
+            if not container_status or container_status != "running":
+                logger.error(f"Container for agent {agent_id} is not running")
+                return None
+
+            # Get container port mapping
+            port_mapping = await self._get_container_port(agent.container_id)
+            if not port_mapping:
+                logger.error(f"Failed to get port mapping for container {agent.container_id}")
+                return None
+
+            # Prepare request to container
+            url = f"http://localhost:{port_mapping}/query"
+            payload = {"query": query}
+
+            # Send request to container
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(url, json=payload)
+                response.raise_for_status()
+                data = response.json()
+                return data.get("response")
+
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error communicating with agent {agent_id}: {str(e)}")
+            return None
         except Exception as e:
             logger.error(f"Error getting response from agent {agent_id}: {str(e)}")
             return None
@@ -661,6 +702,40 @@ class AgentService:
             logger.error(f"Error getting logs for agent {agent_id}: {str(e)}")
             return None
 
+    async def _get_container_port(self, container_id: str) -> Optional[int]:
+        """
+        Get the port mapping for a container.
+
+        Args:
+            container_id: The container ID
+
+        Returns:
+            The host port mapped to the container's port 8000 if found, None otherwise
+        """
+        try:
+            # Get container information using the container service
+            success, info = await self.container_service.inspect_container(container_id)
+            if not success or not info:
+                logger.warning(f"Failed to inspect container {container_id}")
+                return None
+
+            # Parse port mappings from container info
+            # The format is typically: {'8000/tcp': [{'HostIp': '0.0.0.0', 'HostPort': '9123'}]}
+            ports = info.get('NetworkSettings', {}).get('Ports', {})
+            container_port = '8000/tcp'  # The port exposed by the agent container
+            
+            if container_port in ports and ports[container_port]:
+                mapping = ports[container_port][0]
+                if 'HostPort' in mapping:
+                    return int(mapping['HostPort'])
+            
+            logger.warning(f"No port mapping found for container {container_id}")
+            return None
+
+        except Exception as e:
+            logger.error(f"Error getting port mapping for container {container_id}: {str(e)}")
+            return None
+            
     async def get_agent_container_stats(
         self, agent_id: UUID
     ) -> Optional[Dict[str, Any]]:

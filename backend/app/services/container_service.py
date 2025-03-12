@@ -480,6 +480,41 @@ class ContainerService:
             logger.error(f"Error listing agent containers: {str(e)}")
             return []
 
+    async def inspect_container(self, container_id: str) -> Tuple[bool, Optional[Dict[str, Any]]]:
+        """
+        Inspect a Podman container to get detailed information.
+
+        Args:
+            container_id: The container ID
+
+        Returns:
+            A tuple of (success, container_info)
+        """
+        if not PODMAN_AVAILABLE:
+            return False, None
+
+        try:
+            result = subprocess.run(
+                ["podman", "inspect", container_id],
+                capture_output=True,
+                text=True,
+            )
+
+            if result.returncode != 0:
+                logger.error(f"Error inspecting container {container_id}: {result.stderr}")
+                return False, None
+
+            # Parse the JSON output
+            container_info = json.loads(result.stdout)
+            if not container_info or not isinstance(container_info, list) or len(container_info) == 0:
+                logger.error(f"Invalid container info format for {container_id}")
+                return False, None
+
+            return True, container_info[0]
+        except (subprocess.SubprocessError, json.JSONDecodeError) as e:
+            logger.error(f"Error inspecting container {container_id}: {str(e)}")
+            return False, None
+
     async def get_container_stats(self, container_id: str) -> Optional[Dict[str, Any]]:
         """
         Get the stats of a Podman container.
