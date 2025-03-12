@@ -5,7 +5,7 @@ Service for agent-related operations.
 import logging
 import os
 import shutil
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from uuid import UUID
 
 from agno.knowledge.pdf import PDFKnowledgeBase, PDFReader
@@ -233,7 +233,10 @@ class AgentService:
                     db_url=VECTOR_DB_URL,
                 ),
                 reader=PDFReader(
-                    chunk=True, chunk_size=chunk_size, chunk_overlap=chunk_overlap
+                    chunk=True,
+                    chunk_size=chunk_size,
+                    # chunk_overlap parameter is not supported in the current version
+                    # chunk_overlap=chunk_overlap
                 ),
             )
 
@@ -241,7 +244,8 @@ class AgentService:
             knowledge_base.load(recreate=recreate)
 
             # Initialize agent
-            agent = AgnoAgent(
+            # Store the agent instance if needed in the future
+            AgnoAgent(
                 knowledge=knowledge_base,
                 search_knowledge=True,
             )

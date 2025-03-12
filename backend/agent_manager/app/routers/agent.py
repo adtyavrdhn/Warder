@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.agent import AgentCreate, AgentUpdate, AgentResponse
 from app.services.agent_service import AgentService
 from app.repositories.agent_repository import AgentRepository
-from common.utils.db import get_db
+from app.utils.db import get_db
 
 # Configure logger
 logger = logging.getLogger(__name__)

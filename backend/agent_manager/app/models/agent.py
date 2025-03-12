@@ -4,13 +4,11 @@ Agent database model for the Agent Manager service.
 
 from datetime import datetime
 from typing import Dict, Any
-from uuid import UUID
 
 from sqlalchemy import Column, String, DateTime, JSON, Enum
 from sqlalchemy.dialects.postgresql import UUID as PostgresUUID
-
-from common.utils.db import Base
 from app.schemas.agent import AgentType, AgentStatus
+from app.utils.db import Base
 
 
 class Agent(Base):

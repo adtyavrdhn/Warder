@@ -10,8 +10,8 @@ from fastapi.responses import JSONResponse
 
 from app.routers import agent
 from config.logging import configure_logging
-from common.utils.db import init_db
 from config.db import KNOWLEDGE_BASE_DIR
+from app.utils.db import init_db
 
 # Configure logging
 logger = configure_logging("agent_manager")
