@@ -19,7 +19,7 @@ async def test_user(db_session):
         username="testuser",
         email="test@example.com",
         first_name="Test",
-        last_name="User"
+        last_name="User",
     )
     user.set_password("Password123!")
     db_session.add(user)
@@ -79,7 +79,7 @@ class TestAgentContainerEndpoints:
         # Set up
         mock_create.return_value = (True, "test-container-id")
         mock_start.return_value = (True, "Container started")
-        
+
         # Execute
         response = await client.post(
             f"/api/agents/{test_agent.id}/start",
@@ -100,7 +100,7 @@ class TestAgentContainerEndpoints:
         test_agent.container_id = "test-container-id"
         test_agent.container_status = ContainerStatus.RUNNING
         mock_stop.return_value = (True, "Container stopped")
-        
+
         # Execute
         response = await client.post(
             f"/api/agents/{test_agent.id}/stop",
@@ -113,15 +113,13 @@ class TestAgentContainerEndpoints:
 
     @pytest.mark.asyncio
     @patch.object(ContainerService, "get_container_logs")
-    async def test_get_agent_logs(
-        self, mock_logs, client, test_agent, auth_headers
-    ):
+    async def test_get_agent_logs(self, mock_logs, client, test_agent, auth_headers):
         """Test getting agent container logs."""
         # Set up
         test_agent.container_id = "test-container-id"
         test_agent.container_status = ContainerStatus.RUNNING
         mock_logs.return_value = "Test container logs"
-        
+
         # Execute
         response = await client.get(
             f"/api/agents/{test_agent.id}/logs",
@@ -134,15 +132,13 @@ class TestAgentContainerEndpoints:
 
     @pytest.mark.asyncio
     @patch.object(ContainerService, "get_container_stats")
-    async def test_get_agent_stats(
-        self, mock_stats, client, test_agent, auth_headers
-    ):
+    async def test_get_agent_stats(self, mock_stats, client, test_agent, auth_headers):
         """Test getting agent container stats."""
         # Set up
         test_agent.container_id = "test-container-id"
         test_agent.container_status = ContainerStatus.RUNNING
         mock_stats.return_value = {"cpu": "10%", "memory": "100MB"}
-        
+
         # Execute
         response = await client.get(
             f"/api/agents/{test_agent.id}/stats",
@@ -163,7 +159,7 @@ class TestAgentContainerEndpoints:
         test_agent.container_id = "test-container-id"
         test_agent.container_status = ContainerStatus.RUNNING
         mock_logs.return_value = "Test container logs"
-        
+
         # Execute
         response = await client.get(
             f"/api/agents/{test_agent.id}/logs?lines=50",
@@ -197,7 +193,7 @@ class TestAgentContainerEndpoints:
         # Set up
         test_agent.container_id = "test-container-id"
         mock_start.return_value = (False, "Failed to start container")
-        
+
         # Execute
         response = await client.post(
             f"/api/agents/{test_agent.id}/start",

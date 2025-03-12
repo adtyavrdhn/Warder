@@ -66,16 +66,18 @@ class TestAgentServiceContainer:
         """Test creating an agent container."""
         # Set up
         service = AgentService(mock_db_session)
-        
+
         # Mock the get_agent method
         service.get_agent = AsyncMock(return_value=mock_agent)
-        
+
         # Mock the container service create_container method
-        mock_container_service.create_container = AsyncMock(return_value=(True, "test-container-id"))
-        
+        mock_container_service.create_container = AsyncMock(
+            return_value=(True, "test-container-id")
+        )
+
         # Execute
         success = await service.create_agent_container(mock_agent.id)
-        
+
         # Assert
         assert success is True
         mock_container_service.create_container.assert_called_once_with(mock_agent)
@@ -90,16 +92,18 @@ class TestAgentServiceContainer:
         """Test failure when creating an agent container."""
         # Set up
         service = AgentService(mock_db_session)
-        
+
         # Mock the get_agent method
         service.get_agent = AsyncMock(return_value=mock_agent)
-        
+
         # Mock the container service create_container method
-        mock_container_service.create_container = AsyncMock(return_value=(False, "Test error"))
-        
+        mock_container_service.create_container = AsyncMock(
+            return_value=(False, "Test error")
+        )
+
         # Execute
         success = await service.create_agent_container(mock_agent.id)
-        
+
         # Assert
         assert success is False
         mock_container_service.create_container.assert_called_once_with(mock_agent)
@@ -115,19 +119,25 @@ class TestAgentServiceContainer:
         service = AgentService(mock_db_session)
         mock_agent.container_id = "test-container-id"
         mock_agent.container_status = ContainerStatus.STOPPED
-        
+
         # Mock the container service
-        mock_container_service.start_container = AsyncMock(return_value=(True, "Container started"))
-        
+        mock_container_service.start_container = AsyncMock(
+            return_value=(True, "Container started")
+        )
+
         # Mock the get_agent method
-        mock_db_session.execute.return_value.scalar_one_or_none = MagicMock(return_value=mock_agent)
-        
+        mock_db_session.execute.return_value.scalar_one_or_none = MagicMock(
+            return_value=mock_agent
+        )
+
         # Execute
         success = await service.start_agent_container(mock_agent.id)
-        
+
         # Assert
         assert success is True
-        mock_container_service.start_container.assert_called_once_with("test-container-id")
+        mock_container_service.start_container.assert_called_once_with(
+            "test-container-id"
+        )
         assert mock_agent.container_status == ContainerStatus.RUNNING
         mock_db_session.commit.assert_awaited_once()
 
@@ -140,13 +150,15 @@ class TestAgentServiceContainer:
         service = AgentService(mock_db_session)
         mock_agent.container_id = None
         mock_agent.container_status = ContainerStatus.NONE
-        
+
         # Mock the get_agent method
-        mock_db_session.execute.return_value.scalar_one_or_none = MagicMock(return_value=mock_agent)
-        
+        mock_db_session.execute.return_value.scalar_one_or_none = MagicMock(
+            return_value=mock_agent
+        )
+
         # Execute
         success = await service.start_agent_container(mock_agent.id)
-        
+
         # Assert
         # Current implementation returns False when no container exists
         assert success is False
@@ -161,19 +173,25 @@ class TestAgentServiceContainer:
         service = AgentService(mock_db_session)
         mock_agent.container_id = "test-container-id"
         mock_agent.container_status = ContainerStatus.RUNNING
-        
+
         # Mock the container service
-        mock_container_service.stop_container = AsyncMock(return_value=(True, "Container stopped"))
-        
+        mock_container_service.stop_container = AsyncMock(
+            return_value=(True, "Container stopped")
+        )
+
         # Mock the get_agent method
-        mock_db_session.execute.return_value.scalar_one_or_none = MagicMock(return_value=mock_agent)
-        
+        mock_db_session.execute.return_value.scalar_one_or_none = MagicMock(
+            return_value=mock_agent
+        )
+
         # Execute
         success = await service.stop_agent_container(mock_agent.id)
-        
+
         # Assert
         assert success is True
-        mock_container_service.stop_container.assert_called_once_with("test-container-id")
+        mock_container_service.stop_container.assert_called_once_with(
+            "test-container-id"
+        )
         assert mock_agent.container_status == ContainerStatus.STOPPED
         mock_db_session.commit.assert_awaited_once()
 
@@ -186,13 +204,15 @@ class TestAgentServiceContainer:
         service = AgentService(mock_db_session)
         mock_agent.container_id = None
         mock_agent.container_status = ContainerStatus.NONE
-        
+
         # Mock the get_agent method
-        mock_db_session.execute.return_value.scalar_one_or_none = MagicMock(return_value=mock_agent)
-        
+        mock_db_session.execute.return_value.scalar_one_or_none = MagicMock(
+            return_value=mock_agent
+        )
+
         # Execute
         success = await service.stop_agent_container(mock_agent.id)
-        
+
         # Assert
         assert success is False
         mock_container_service.stop_container.assert_not_called()
@@ -208,16 +228,20 @@ class TestAgentServiceContainer:
         service = AgentService(mock_db_session)
         mock_agent.container_id = "test-container-id"
         mock_agent.container_status = ContainerStatus.RUNNING
-        
+
         # Mock the container service
-        mock_container_service.get_container_logs = AsyncMock(return_value="Test container logs")
-        
+        mock_container_service.get_container_logs = AsyncMock(
+            return_value="Test container logs"
+        )
+
         # Mock the get_agent method
-        mock_db_session.execute.return_value.scalar_one_or_none = MagicMock(return_value=mock_agent)
-        
+        mock_db_session.execute.return_value.scalar_one_or_none = MagicMock(
+            return_value=mock_agent
+        )
+
         # Execute
         logs = await service.get_agent_container_logs(mock_agent.id, 100)
-        
+
         # Assert
         assert logs == "Test container logs"
         mock_container_service.get_container_logs.assert_called_once_with(
@@ -233,19 +257,23 @@ class TestAgentServiceContainer:
         service = AgentService(mock_db_session)
         mock_agent.container_id = "test-container-id"
         mock_agent.container_status = ContainerStatus.RUNNING
-        
+
         # Mock the container service
-        mock_container_service.get_container_stats = AsyncMock(return_value={
-            "cpu": "10%",
-            "memory": "100MB",
-        })
-        
+        mock_container_service.get_container_stats = AsyncMock(
+            return_value={
+                "cpu": "10%",
+                "memory": "100MB",
+            }
+        )
+
         # Mock the get_agent method
-        mock_db_session.execute.return_value.scalar_one_or_none = MagicMock(return_value=mock_agent)
-        
+        mock_db_session.execute.return_value.scalar_one_or_none = MagicMock(
+            return_value=mock_agent
+        )
+
         # Execute
         stats = await service.get_agent_container_stats(mock_agent.id)
-        
+
         # Assert
         assert stats == {"cpu": "10%", "memory": "100MB"}
         mock_container_service.get_container_stats.assert_called_once_with(
@@ -261,18 +289,24 @@ class TestAgentServiceContainer:
         service = AgentService(mock_db_session)
         mock_agent.container_id = "test-container-id"
         mock_agent.container_status = ContainerStatus.RUNNING
-        
+
         # Mock the container service
-        mock_container_service.delete_container = AsyncMock(return_value=(True, "Container deleted"))
-        
+        mock_container_service.delete_container = AsyncMock(
+            return_value=(True, "Container deleted")
+        )
+
         # Mock the get_agent method
-        mock_db_session.execute.return_value.scalar_one_or_none = MagicMock(return_value=mock_agent)
-        
+        mock_db_session.execute.return_value.scalar_one_or_none = MagicMock(
+            return_value=mock_agent
+        )
+
         # Execute
         success = await service.delete_agent(mock_agent.id)
-        
+
         # Assert
         assert success is True
-        mock_container_service.delete_container.assert_called_once_with("test-container-id")
+        mock_container_service.delete_container.assert_called_once_with(
+            "test-container-id"
+        )
         mock_db_session.delete.assert_called_once_with(mock_agent)
         mock_db_session.commit.assert_awaited_once()
