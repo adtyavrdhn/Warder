@@ -1,10 +1,12 @@
+# /Users/adivardh/Warder/backend/app/models/agent.py
 """
 Agent model for the Warder application.
 """
 
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, JSON, Enum
+from sqlalchemy import Column, String, DateTime, JSON, Enum, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 import uuid
 import enum
 
@@ -43,13 +45,17 @@ class Agent(Base):
     type = Column(Enum(AgentType), nullable=False, default=AgentType.RAG)
     status = Column(Enum(AgentStatus), nullable=False, default=AgentStatus.CREATING)
     config = Column(JSON, nullable=False, default={})
-    created_at = Column(DateTime, nullable=False, default=datetime.now(timezone.utc))
+    user_id = Column(UUID(as_uuid=True), ForeignKey("warder.users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         nullable=False,
-        default=datetime.now(timezone.utc),
-        onupdate=datetime.now(timezone.utc),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
+
+    # Relationships
+    user = relationship("User", back_populates="agents")
 
     def __repr__(self):
         """String representation of the agent."""

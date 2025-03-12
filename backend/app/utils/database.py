@@ -55,9 +55,10 @@ async def drop_tables():
     try:
         # Import all models to ensure they're registered with the Base metadata
         # These imports must be here to avoid circular imports
+        from app.models.user import User
         from app.models.agent import Agent
-        from app.models.document_fixed import Document, DocumentChunk
-        
+        from app.models.document import Document, DocumentChunk
+
         # Drop all tables
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.drop_all)
@@ -74,20 +75,24 @@ async def create_tables():
         async with AsyncSession(engine) as session:
             await session.execute(text("CREATE SCHEMA IF NOT EXISTS warder"))
             await session.commit()
-        
+
         # Import all models to ensure they're registered with the Base metadata
         # These imports must be here to avoid circular imports
+        from app.models.user import User
         from app.models.agent import Agent
-        from app.models.document_fixed import Document, DocumentChunk
-        
-        # First drop any existing tables to ensure clean state
-        await drop_tables()
-        
+        from app.models.document import Document, DocumentChunk
+
         # Create tables with explicit ordering
         async with engine.begin() as conn:
             # Create tables in the correct order to respect foreign key constraints
             await conn.run_sync(Base.metadata.create_all)
-            
+
+        # Run migrations to ensure database is up to date
+        from app.utils.migrations import run_migrations
+
+        async with AsyncSession(engine) as session:
+            await run_migrations(session)
+
         logger.info("Database tables created successfully")
     except Exception as e:
         logger.error(f"Error creating database tables: {str(e)}")

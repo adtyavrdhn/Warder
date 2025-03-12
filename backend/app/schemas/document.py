@@ -6,7 +6,7 @@ from typing import Dict, Optional, Any, List
 from uuid import UUID
 from pydantic import BaseModel, Field
 
-from app.models.document_fixed import DocumentStatus
+from app.models.document import DocumentStatus
 
 
 class DocumentCreate(BaseModel):
@@ -25,7 +25,9 @@ class DocumentUpdate(BaseModel):
     """Schema for updating a document."""
 
     status: Optional[DocumentStatus] = Field(None, description="Document status")
-    doc_metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+    doc_metadata: Optional[Dict[str, Any]] = Field(
+        None, description="Additional metadata"
+    )
 
 
 class DocumentResponse(BaseModel):

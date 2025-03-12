@@ -1,3 +1,4 @@
+# /Users/adivardh/Warder/backend/app/schemas/agent.py
 """
 Agent schemas for the Warder application.
 """
@@ -30,6 +31,7 @@ class AgentCreate(BaseModel):
     config: Dict[str, Any] = Field(
         default_factory=dict, description="Additional configuration"
     )
+    user_id: UUID = Field(..., description="ID of the user who owns this agent")
 
 
 class AgentUpdate(BaseModel):
@@ -52,6 +54,7 @@ class AgentResponse(BaseModel):
     type: AgentType = Field(..., description="Type of the agent")
     status: AgentStatus = Field(..., description="Status of the agent")
     config: Dict[str, Any] = Field(..., description="Additional configuration")
+    user_id: UUID = Field(..., description="ID of the user who owns this agent")
     created_at: str = Field(..., description="Creation timestamp")
     updated_at: str = Field(..., description="Last update timestamp")
 

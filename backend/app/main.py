@@ -9,7 +9,9 @@ from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.routers import agent_router, document_router
+from app.routers import agent_router, document_router, auth_router, user_router
+from app.middleware.logging_middleware import LoggingMiddleware
+from app.middleware.error_middleware import ErrorHandlingMiddleware
 from app.utils.database import init_db, create_tables
 from app.utils.logging_config import configure_logging
 
@@ -23,7 +25,7 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# Configure CORS
+# Configure middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Allows all origins in development
@@ -31,6 +33,12 @@ app.add_middleware(
     allow_methods=["*"],  # Allows all methods
     allow_headers=["*"],  # Allows all headers
 )
+
+# Add logging middleware
+app.add_middleware(LoggingMiddleware)
+
+# Add error handling middleware
+app.add_middleware(ErrorHandlingMiddleware)
 
 
 # Initialize database and create necessary directories on startup
@@ -67,8 +75,10 @@ async def root():
 
 
 # Include routers
-app.include_router(agent_router.router, prefix="/agents", tags=["Agents"])
-app.include_router(document_router.router, prefix="/documents", tags=["Documents"])
+app.include_router(auth_router.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(user_router.router, prefix="/api/users", tags=["Users"])
+app.include_router(agent_router.router, prefix="/api/agents", tags=["Agents"])
+app.include_router(document_router.router, prefix="/api/documents", tags=["Documents"])
 
 
 # Error handlers

@@ -21,9 +21,10 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import the database functions
 from app.utils.database import init_db, drop_tables, create_tables
+
 # Import models to ensure they're registered with SQLAlchemy
 from app.models.agent import Agent, AgentType, AgentStatus
-from app.models.document_fixed import Document, DocumentChunk, DocumentStatus
+from app.models.document import Document, DocumentChunk, DocumentStatus
 
 
 async def reset_database():
@@ -37,7 +38,7 @@ async def reset_database():
 
         logger.info("Creating tables from scratch")
         await create_tables()
-        
+
         logger.info("Database reset completed successfully")
     except Exception as e:
         logger.error(f"Error resetting database: {str(e)}")

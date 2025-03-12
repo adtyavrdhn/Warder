@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.models.document_fixed import Document, DocumentChunk, DocumentStatus
+from app.models.document import Document, DocumentChunk, DocumentStatus
 from app.schemas.document import DocumentCreate, DocumentUpdate, DocumentChunkCreate
 
 # Try to import document processing libraries, but handle gracefully if not available
@@ -205,7 +205,10 @@ class DocumentService:
 
             if "doc_metadata" in update_data and update_data["doc_metadata"]:
                 # Merge metadata instead of replacing
-                document.doc_metadata = {**document.doc_metadata, **update_data["doc_metadata"]}
+                document.doc_metadata = {
+                    **document.doc_metadata,
+                    **update_data["doc_metadata"],
+                }
                 del update_data["doc_metadata"]
 
             # Update other fields
