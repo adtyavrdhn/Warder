@@ -178,6 +178,25 @@ class ContainerService:
                     "AGENT_TYPE": agent.type.value,
                 }
             )
+            
+            # Add knowledge base configuration for RAG agents
+            if agent.type.value == "rag":
+                # Get knowledge base config from agent config
+                kb_config = agent.config.get("knowledge_base", {})
+                
+                # Set knowledge path to the mounted directory in the container
+                env_vars["KNOWLEDGE_PATH"] = "/app/data/pdfs"
+                
+                # Set vector database configuration
+                env_vars["VECTOR_DB_URL"] = VECTOR_DB_URL
+                # Create a table name for this agent
+                table_name = f"pdf_documents_{agent.id}".replace("-", "_")
+                env_vars["VECTOR_DB_TABLE"] = table_name
+                
+                # Set knowledge base parameters
+                env_vars["KB_RECREATE"] = str(kb_config.get("recreate", False)).lower()
+                env_vars["KB_CHUNK_SIZE"] = str(kb_config.get("chunk_size", 1000))
+                env_vars["KB_CHUNK_OVERLAP"] = str(kb_config.get("chunk_overlap", 200))
 
             # Create the container
             logger.info(
@@ -205,6 +224,16 @@ class ContainerService:
 
             # Add restart policy
             cmd.extend(["--restart", "unless-stopped"])
+            
+            # Mount knowledge base directory for RAG agents
+            if agent.type.value == "rag":
+                # Get the agent's knowledge base directory
+                kb_base = os.getenv("KNOWLEDGE_BASE_DIR", "data/knowledge_base")
+                kb_dir = os.path.join(kb_base, str(agent.id))
+                # Ensure the directory exists
+                os.makedirs(kb_dir, exist_ok=True)
+                # Mount the directory to the container
+                cmd.extend(["-v", f"{kb_dir}:/app/data/pdfs:ro"])
 
             # Add labels
             cmd.extend(

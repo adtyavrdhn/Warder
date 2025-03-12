@@ -252,7 +252,7 @@ class AgentService:
             query = select(Agent).where(Agent.id == agent_id)
             result = await self.db.execute(query)
             agent = result.scalar_one_or_none()
-            
+
             if not agent:
                 logger.warning(f"Agent with ID {agent_id} not found for deletion")
                 return False
@@ -330,24 +330,28 @@ class AgentService:
         try:
             logger.info(f"Initializing RAG agent with ID: {agent_id}")
 
-            # Initialize vector store
-            vector_store = PgVector(
-                connection_string=VECTOR_DB_URL,
-                collection_name=f"agent_{agent_id}",
-                recreate_collection=recreate,
-            )
+            # Initialize vector store with proper table name for the agent
+            table_name = f"pdf_documents_{agent_id}".replace("-", "_")
 
-            # Initialize knowledge base
+            # Initialize PDF knowledge base using the correct pattern
             knowledge_base = PDFKnowledgeBase(
-                pdf_reader=PDFReader(),
-                vector_store=vector_store,
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
+                path=kb_dir,  # Use the agent's knowledge base directory
+                vector_db=PgVector(
+                    table_name=table_name,
+                    db_url=VECTOR_DB_URL,
+                ),
+                reader=PDFReader(
+                    chunk=True, chunk_size=chunk_size, chunk_overlap=chunk_overlap
+                ),
             )
 
-            # Initialize agent
+            # Load the knowledge base
+            knowledge_base.load(recreate=recreate)
+
+            # Initialize agent with the knowledge base
             agent = AgnoAgent(
-                knowledge_base=knowledge_base,
+                knowledge=knowledge_base,
+                search_knowledge=True,
             )
 
             logger.info(f"RAG agent initialized successfully with ID: {agent_id}")
@@ -448,7 +452,7 @@ class AgentService:
             query = select(Agent).where(Agent.id == agent_id)
             result = await self.db.execute(query)
             agent = result.scalar_one_or_none()
-            
+
             if not agent:
                 logger.warning(
                     f"Agent with ID {agent_id} not found for starting container"
@@ -500,7 +504,7 @@ class AgentService:
             query = select(Agent).where(Agent.id == agent_id)
             result = await self.db.execute(query)
             agent = result.scalar_one_or_none()
-            
+
             if not agent:
                 logger.warning(
                     f"Agent with ID {agent_id} not found for stopping container"
@@ -553,7 +557,7 @@ class AgentService:
             query = select(Agent).where(Agent.id == agent_id)
             result = await self.db.execute(query)
             agent = result.scalar_one_or_none()
-            
+
             if not agent:
                 logger.warning(f"Agent with ID {agent_id} not found for getting logs")
                 return None
@@ -593,7 +597,7 @@ class AgentService:
             query = select(Agent).where(Agent.id == agent_id)
             result = await self.db.execute(query)
             agent = result.scalar_one_or_none()
-            
+
             if not agent:
                 logger.warning(f"Agent with ID {agent_id} not found for getting stats")
                 return None

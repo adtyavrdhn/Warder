@@ -73,8 +73,34 @@ def initialize_agent():
         knowledge_base = None
         if knowledge_path:
             logger.info(f"Initializing knowledge base from {knowledge_path}")
-            knowledge_base = KnowledgeBase(path=knowledge_path)
-            knowledge_base.load(recreate=False)
+
+            # Get database configuration from environment variables
+            db_url = os.environ.get(
+                "VECTOR_DB_URL", "postgresql+psycopg://ai:ai@localhost:5532/ai"
+            )
+            table_name = os.environ.get("VECTOR_DB_TABLE", "pdf_documents")
+            recreate = os.environ.get("KB_RECREATE", "False").lower() == "true"
+            chunk_size = int(os.environ.get("KB_CHUNK_SIZE", "1000"))
+            chunk_overlap = int(os.environ.get("KB_CHUNK_OVERLAP", "200"))
+
+            # Initialize PDF knowledge base using the correct pattern
+            from agno.knowledge.pdf import PDFKnowledgeBase, PDFReader
+            from agno.vectordb.pgvector import PgVector
+
+            logger.info(
+                f"Initializing PDF knowledge base with vector DB: {db_url}, table: {table_name}"
+            )
+            knowledge_base = PDFKnowledgeBase(
+                path=knowledge_path,
+                vector_db=PgVector(
+                    table_name=table_name,
+                    db_url=db_url,
+                ),
+                reader=PDFReader(
+                    chunk=True, chunk_size=chunk_size, chunk_overlap=chunk_overlap
+                ),
+            )
+            knowledge_base.load(recreate=recreate)
 
         # Initialize agent
         logger.info(
@@ -112,7 +138,7 @@ async def chat(message: Message):
     if agent and AGNO_AVAILABLE:
         try:
             # Get response from the agent
-            agent_response = agent.get_response(message.content)
+            agent_response = agent.print_response(message.content)
             logger.info(f"Agent response: {agent_response}")
             return Response(content=agent_response)
         except Exception as e:
