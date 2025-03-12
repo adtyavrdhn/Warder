@@ -98,22 +98,6 @@ async def create_agent(
         )
 
 
-@router.post("/{agent_id}/chat", status_code=status.HTTP_200_OK)
-async def chat_with_agent(
-    agent_id: UUID,
-    message: dict,
-    db: AsyncSession = Depends(get_db),
-) -> Dict[str, str]:
-    """Chat with an agent."""
-    # Get agent from database
-    agent = await db.get(Agent, agent_id)
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
-
-    # Get response from agent (either container or in-process)
-    return await agent_service.get_agent_response(agent_id, message)
-
-
 @router.get("/{agent_id}", response_model=AgentResponse)
 async def get_agent(
     agent_id: UUID, db: AsyncSession = Depends(get_db)
