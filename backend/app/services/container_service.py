@@ -214,7 +214,7 @@ class ContainerService:
             cmd.extend(["--network", DEFAULT_NETWORK])
 
             # Add port mapping
-            cmd.extend(["-p", f"{host_port}:8000/tcp"])
+            cmd.extend(["-p", f"{host_port}:8080/tcp"])
 
             # Add memory limit
             cmd.extend(["--memory", memory_limit])

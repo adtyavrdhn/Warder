@@ -29,6 +29,26 @@ class AgentQuery(BaseModel):
     query: str
 
 
+def _convert_to_agent_response(agent) -> AgentResponse:
+    """Convert Agent model to AgentResponse schema."""
+    return AgentResponse(
+        id=agent.id,
+        name=agent.name,
+        description=agent.description,
+        type=agent.type,
+        status=agent.status,
+        config=agent.config,
+        user_id=agent.user_id,
+        container_id=agent.container_id,
+        container_name=agent.container_name,
+        container_status=agent.container_status,
+        container_config=agent.container_config or {},
+        host_port=agent.host_port,
+        created_at=agent.created_at.isoformat(),
+        updated_at=agent.updated_at.isoformat(),
+    )
+
+
 async def get_agent_response(self, agent_id: UUID, message: dict) -> Dict[str, str]:
     """Get a response from an agent."""
     agent = await self.db.get(Agent, agent_id)
@@ -72,16 +92,7 @@ async def create_agent(
         agent = await service.create_agent(agent_data)
 
         # Convert to response model
-        return AgentResponse(
-            id=agent.id,
-            name=agent.name,
-            description=agent.description,
-            type=agent.type,
-            status=agent.status,
-            config=agent.config,
-            created_at=agent.created_at.isoformat(),
-            updated_at=agent.updated_at.isoformat(),
-        )
+        return _convert_to_agent_response(agent)
 
     except Exception as e:
         logger.error(f"Error creating agent: {str(e)}")
@@ -126,16 +137,7 @@ async def get_agent(
             )
 
         # Convert to response model
-        return AgentResponse(
-            id=agent.id,
-            name=agent.name,
-            description=agent.description,
-            type=agent.type,
-            status=agent.status,
-            config=agent.config,
-            created_at=agent.created_at.isoformat(),
-            updated_at=agent.updated_at.isoformat(),
-        )
+        return _convert_to_agent_response(agent)
 
     except HTTPException:
         raise
@@ -227,16 +229,7 @@ async def update_agent(
             )
 
         # Convert to response model
-        return AgentResponse(
-            id=agent.id,
-            name=agent.name,
-            description=agent.description,
-            type=agent.type,
-            status=agent.status,
-            config=agent.config,
-            created_at=agent.created_at.isoformat(),
-            updated_at=agent.updated_at.isoformat(),
-        )
+        return _convert_to_agent_response(agent)
 
     except HTTPException:
         raise

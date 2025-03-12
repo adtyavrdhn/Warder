@@ -59,7 +59,8 @@ class AgentService:
         1. Create the agent record in the database
         2. Create the agent's knowledge base directory if needed
         3. Initialize the agent with Agno if it's a RAG agent
-        4. Update the agent status
+        4. Create a container for the agent
+        5. Update the agent status
 
         Args:
             agent_data: The agent data to create
@@ -142,6 +143,14 @@ class AgentService:
                 # For non-RAG agents, just mark as active
                 agent.status = AgentStatus.ACTIVE
                 await self.db.commit()
+
+            # Create container for the agent
+            logger.info(f"Creating container for agent {agent.id}")
+            container_created = await self.create_agent_container(agent.id)
+            if not container_created:
+                logger.warning(f"Failed to create container for agent {agent.id}")
+                # We don't raise an exception here as the agent itself was created successfully
+                # The container can be created later if needed
 
             # Refresh agent data
             await self.db.refresh(agent)
@@ -336,7 +345,9 @@ class AgentService:
             logger.info(f"Initializing RAG agent with ID: {agent_id}")
 
             # Initialize vector store with proper table name for the agent
-            table_name = f"pdf_documents_{agent_id}".replace("-", "_")
+            # Use only the first 8 characters of the UUID to avoid exceeding PostgreSQL's 63-character limit
+            short_id = str(agent_id).replace("-", "")[:8]
+            table_name = f"pdf_docs_{short_id}"
 
             # Initialize PDF knowledge base using the correct pattern
             knowledge_base = PDFKnowledgeBase(
@@ -345,9 +356,7 @@ class AgentService:
                     table_name=table_name,
                     db_url=VECTOR_DB_URL,
                 ),
-                reader=PDFReader(
-                    chunk=True, chunk_size=chunk_size, chunk_overlap=chunk_overlap
-                ),
+                reader=PDFReader(chunk=True, chunk_size=chunk_size),
             )
 
             # Load the knowledge base
@@ -444,18 +453,22 @@ class AgentService:
                 return None
 
             # Check if container is running and start it if needed
-            if agent.container_status != "RUNNING":
+            logger.info(f"Agent container status: {agent.container_status}")
+            if agent.container_status != ContainerStatus.RUNNING:
                 logger.info(f"Starting container for agent {agent_id}")
                 success = await self.start_agent_container(agent_id)
                 if not success:
                     logger.error(f"Failed to start container for agent {agent_id}")
                     return None
-                
+
                 # Refresh agent data
                 agent = await self.get_agent(agent_id)
+                logger.info(f"Updated agent container status: {agent.container_status}")
 
             # Get container port mapping
-            container_status = await self.container_service.get_container_status(agent.container_id)
+            container_status = await self.container_service.get_container_status(
+                agent.container_id
+            )
             if not container_status or container_status != "running":
                 logger.error(f"Container for agent {agent_id} is not running")
                 return None
@@ -463,19 +476,45 @@ class AgentService:
             # Get container port mapping
             port_mapping = await self._get_container_port(agent.container_id)
             if not port_mapping:
-                logger.error(f"Failed to get port mapping for container {agent.container_id}")
+                logger.error(
+                    f"Failed to get port mapping for container {agent.container_id}"
+                )
                 return None
 
             # Prepare request to container
-            url = f"http://localhost:{port_mapping}/query"
-            payload = {"query": query}
+            url = f"http://localhost:{port_mapping}/chat"
+            payload = {"content": query}
+            
+            logger.info(f"Sending request to agent container at URL: {url}")
+            logger.info(f"Request payload: {payload}")
 
             # Send request to container
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(url, json=payload)
-                response.raise_for_status()
-                data = response.json()
-                return data.get("response")
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    logger.info(f"Sending POST request to {url}")
+                    response = await client.post(url, json=payload)
+                    logger.info(f"Response status code: {response.status_code}")
+                    response.raise_for_status()
+                    data = response.json()
+                    logger.info(f"Response data: {data}")
+                    
+                    # Check if the response contains an error
+                    if "error" in data:
+                        logger.error(f"Agent returned an error: {data['error']}")
+                        return None
+                    
+                    # The /chat endpoint returns a Response object with 'content' field
+                    if "content" in data:
+                        return data.get("content")
+                    
+                    # Fallback to the old response format if content is not found
+                    return data.get("response")
+            except httpx.HTTPStatusError as e:
+                logger.error(f"HTTP error occurred: {e.response.status_code} - {e.response.text}")
+                return None
+            except httpx.RequestError as e:
+                logger.error(f"Request error occurred: {str(e)}")
+                return None
 
         except httpx.HTTPError as e:
             logger.error(f"HTTP error communicating with agent {agent_id}: {str(e)}")
@@ -720,22 +759,24 @@ class AgentService:
                 return None
 
             # Parse port mappings from container info
-            # The format is typically: {'8000/tcp': [{'HostIp': '0.0.0.0', 'HostPort': '9123'}]}
-            ports = info.get('NetworkSettings', {}).get('Ports', {})
-            container_port = '8000/tcp'  # The port exposed by the agent container
-            
+            # The format is typically: {'8080/tcp': [{'HostIp': '0.0.0.0', 'HostPort': '9123'}]}
+            ports = info.get("NetworkSettings", {}).get("Ports", {})
+            container_port = "8080/tcp"  # The port exposed by the agent container
+
             if container_port in ports and ports[container_port]:
                 mapping = ports[container_port][0]
-                if 'HostPort' in mapping:
-                    return int(mapping['HostPort'])
-            
+                if "HostPort" in mapping:
+                    return int(mapping["HostPort"])
+
             logger.warning(f"No port mapping found for container {container_id}")
             return None
 
         except Exception as e:
-            logger.error(f"Error getting port mapping for container {container_id}: {str(e)}")
+            logger.error(
+                f"Error getting port mapping for container {container_id}: {str(e)}"
+            )
             return None
-            
+
     async def get_agent_container_stats(
         self, agent_id: UUID
     ) -> Optional[Dict[str, Any]]:
