@@ -4,7 +4,6 @@ A simplified monolithic backend for the Warder system
 """
 
 import os
-import logging
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse

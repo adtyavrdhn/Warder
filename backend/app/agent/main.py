@@ -7,6 +7,7 @@ import logging
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from agno.agent import Agent
+from agno.models.openai import OpenAIChat
 from pydantic import BaseModel
 import sys
 
@@ -95,11 +96,13 @@ def initialize_agent():
         )
 
         # Initialize agent with LLM configuration
+
         agent = Agent(
-            name=agent_name,
+            model=OpenAIChat(id="gpt-4o"),
             knowledge=knowledge_base,
-            search_knowledge=True if knowledge_base else False,
-            model="gpt-4o",
+            search_knowledge=True,
+            show_tool_calls=True,
+            markdown=True,
         )
 
         logger.info("Agent initialized successfully")
@@ -130,6 +133,9 @@ async def chat(message: Message):
             raise HTTPException(status_code=503, detail="Agent not initialized")
 
         # Get response from the agent - handle response as plain string
+        logger.info("Getting response from agent")
+        logger.info(f"Message role: {message.content}")
+        logger.info(f"Agent: {agent}")
         response_text = agent.print_response(message.content)
         if response_text is None:
             raise HTTPException(status_code=500, detail="No response from agent")

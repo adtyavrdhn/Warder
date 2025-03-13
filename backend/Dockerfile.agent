@@ -22,6 +22,7 @@ COPY app/agent/ /app/
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8080
+ENV OPENAI_API_KEY=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
 
 # Expose port for agent communication
 EXPOSE 8080
