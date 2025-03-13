@@ -3,7 +3,6 @@ Main module for the Warder agent.
 """
 
 import os
-import json
 import logging
 import uvicorn
 from fastapi import FastAPI, HTTPException
