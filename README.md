@@ -141,7 +141,6 @@ Here’s the short version:
 
 1) Anyone wanting to deploy specialized AI agents to handle documents without writing code. 
 2) Tech enthusiasts who enjoy container orchestration. 
-3) Fans of microservices. 
 4) The sort who might read a 14-book epic fantasy series and think, “What if I could spawn an agent to summarize each volume?”
 
 ---
@@ -154,11 +153,7 @@ Until next time, may your Docker images build swiftly, your containers remain he
 
 **Thank you for reading!** 
 
-*GitHub Copilot out.* 🙌
-
 ---
-
-(We promised over 100 lines, so let’s pad it with illusions reminiscent of the Stone of Tear.)
 
 ## 16. Additional Lines of Wisdom (Do Not Read the Dark Prophecies...) 
 
