@@ -147,20 +147,15 @@ async def chat(message: Message):
     logger.info(f"Received message: {message.content}")
 
     # Use the agent to generate a response if available
-    if agent and AGNO_AVAILABLE:
-        try:
-            # Get response from the agent
-            agent_response = agent.print_response(message.content)
-            logger.info(f"Agent response: {agent_response}")
-            return Response(content=agent_response)
-        except Exception as e:
-            logger.error(f"Error getting response from agent: {str(e)}")
-            # Fall back to echo response if there's an error
-            return Response(content=f"Error: {str(e)}")
-    else:
-        # Simple echo response for testing when agent is not available
-        logger.warning("Agent not available. Using echo response.")
-        return Response(content=f"Echo: {message.content}")
+    try:
+        # Get response from the agent
+        agent_response = agent.print_response(message.content)
+        logger.info(f"Agent response: {agent_response}")
+        return Response(content=agent_response)
+    except Exception as e:
+        logger.error(f"Error getting response from agent: {str(e)}")
+        # Fall back to echo response if there's an error
+        return Response(content=f"Error: {str(e)}")
 
 
 @app.post("/query")
@@ -169,20 +164,15 @@ async def query(query_data: Query):
     logger.info(f"Received query: {query_data.query}")
 
     # Use the agent to generate a response if available
-    if agent and AGNO_AVAILABLE:
-        try:
-            # Get response from the agent
-            agent_response = agent.print_response(query_data.query)
-            logger.info(f"Agent response to query: {agent_response}")
-            return {"response": agent_response}
-        except Exception as e:
-            logger.error(f"Error getting response from agent for query: {str(e)}")
-            # Return error message
-            return {"error": str(e)}
-    else:
-        # Simple echo response for testing when agent is not available
-        logger.warning("Agent not available for query. Using echo response.")
-        return {"response": f"Echo: {query_data.query}"}
+    try:
+        # Get response from the agent
+        agent_response = agent.print_response(query_data.query)
+        logger.info(f"Agent response to query: {agent_response}")
+        return {"response": agent_response}
+    except Exception as e:
+        logger.error(f"Error getting response from agent for query: {str(e)}")
+        # Return error message
+        return {"error": str(e)}
 
 
 @app.get("/info")

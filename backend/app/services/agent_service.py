@@ -19,15 +19,10 @@ from app.schemas.agent import AgentCreate, AgentUpdate
 from app.services.container_service import ContainerService
 
 # Try to import Agno for RAG functionality, but handle gracefully if not available
-try:
-    from agno.knowledge.pdf import PDFKnowledgeBase, PDFReader
-    from agno.vectordb.pgvector import PgVector
-    from agno.agent import Agent as AgnoAgent
+from agno.knowledge.pdf import PDFKnowledgeBase, PDFReader
+from agno.vectordb.pgvector import PgVector
+from agno.agent import Agent as AgnoAgent
 
-    AGNO_AVAILABLE = True
-except ImportError:
-    AGNO_AVAILABLE = False
-    logging.warning("Agno library not available. RAG functionality will be limited.")
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -114,18 +109,17 @@ class AgentService:
                     await self.db.commit()
 
                     # Initialize knowledge base if Agno is available
-                    if AGNO_AVAILABLE:
-                        # Get knowledge base config
-                        kb_config = agent_data.knowledge_base or {}
+                    # Get knowledge base config
+                    kb_config = agent_data.knowledge_base or {}
 
-                        # Initialize knowledge base
-                        await self._initialize_rag_agent(
-                            agent_id=agent.id,
-                            kb_dir=kb_dir,
-                            recreate=kb_config.recreate if kb_config else False,
-                            chunk_size=kb_config.chunk_size if kb_config else 1000,
-                            chunk_overlap=kb_config.chunk_overlap if kb_config else 200,
-                        )
+                    # Initialize knowledge base
+                    await self._initialize_rag_agent(
+                        agent_id=agent.id,
+                        kb_dir=kb_dir,
+                        recreate=kb_config.recreate if kb_config else False,
+                        chunk_size=kb_config.chunk_size if kb_config else 1000,
+                        chunk_overlap=kb_config.chunk_overlap if kb_config else 200,
+                    )
 
                     # Update agent status to active
                     agent.status = AgentStatus.ACTIVE
@@ -334,12 +328,6 @@ class AgentService:
         Raises:
             Exception: If there's an error initializing the agent
         """
-        if not AGNO_AVAILABLE:
-            logger.warning(
-                "Agno library not available. Skipping RAG agent initialization."
-            )
-            return
-
         try:
             logger.info(f"Initializing RAG agent with ID: {agent_id}")
 
@@ -484,7 +472,7 @@ class AgentService:
             # Try /chat endpoint first
             url = f"http://localhost:{port_mapping}/chat"
             payload = {"content": query}
-            
+
             logger.info(f"Sending request to agent container at URL: {url}")
             logger.info(f"Request payload: {payload}")
 
@@ -498,42 +486,54 @@ class AgentService:
                         response.raise_for_status()
                         data = response.json()
                         logger.info(f"Response data: {data}")
-                        
+
                         # Check if the response contains an error
                         if "error" in data:
                             logger.error(f"Agent returned an error: {data['error']}")
                             return None
-                        
+
                         # The /chat endpoint returns a Response object with 'content' field
                         if "content" in data:
                             return data.get("content")
-                        
+
                         # Fallback to the old response format if content is not found
                         return data.get("response")
                     except (httpx.HTTPStatusError, httpx.RequestError) as e:
                         # If /chat endpoint fails, try /query endpoint
-                        logger.warning(f"Error with /chat endpoint: {str(e)}. Trying /query endpoint...")
+                        logger.warning(
+                            f"Error with /chat endpoint: {str(e)}. Trying /query endpoint..."
+                        )
                         query_url = f"http://localhost:{port_mapping}/query"
                         query_payload = {"query": query}
-                        
-                        logger.info(f"Sending request to agent container at URL: {query_url}")
+
+                        logger.info(
+                            f"Sending request to agent container at URL: {query_url}"
+                        )
                         logger.info(f"Request payload: {query_payload}")
-                        
-                        query_response = await client.post(query_url, json=query_payload)
-                        logger.info(f"Query response status code: {query_response.status_code}")
+
+                        query_response = await client.post(
+                            query_url, json=query_payload
+                        )
+                        logger.info(
+                            f"Query response status code: {query_response.status_code}"
+                        )
                         query_response.raise_for_status()
                         query_data = query_response.json()
                         logger.info(f"Query response data: {query_data}")
-                        
+
                         # Check if the response contains an error
                         if "error" in query_data:
-                            logger.error(f"Agent returned an error: {query_data['error']}")
+                            logger.error(
+                                f"Agent returned an error: {query_data['error']}"
+                            )
                             return None
-                        
+
                         # The /query endpoint returns a response field
                         return query_data.get("response")
             except httpx.HTTPStatusError as e:
-                logger.error(f"HTTP error occurred: {e.response.status_code} - {e.response.text}")
+                logger.error(
+                    f"HTTP error occurred: {e.response.status_code} - {e.response.text}"
+                )
                 return None
             except httpx.RequestError as e:
                 logger.error(f"Request error occurred: {str(e)}")
