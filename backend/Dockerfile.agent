@@ -11,7 +11,7 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-RUN pip install --no-cache-dir fastapi uvicorn pydantic requests httpx
+RUN pip install --no-cache-dir fastapi uvicorn pydantic requests httpx openai
 
 # Try to install Agno with verbose output to see any errors
 RUN pip install --verbose agno || echo "Agno installation failed, but continuing build"
