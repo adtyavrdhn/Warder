@@ -22,8 +22,6 @@ COPY app/agent/ /app/
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8080
-# ENV OPENAI_API_KEY
-# Expose port for agent communication
 EXPOSE 8080
 
 # Command to run the agent
