@@ -8,7 +8,6 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from agno.agent import Agent
 from pydantic import BaseModel
-from agno.agent import Agent
 import sys
 
 # Configure logging
@@ -53,7 +52,6 @@ def initialize_agent():
     global agent
 
     try:
-        # Get agent configuration from environment variables
         agent_type = os.environ.get("AGENT_TYPE", "rag")
         agent_id = os.environ.get("AGENT_ID", "default")
         agent_name = os.environ.get("AGENT_NAME", "Warder Agent")
@@ -98,6 +96,7 @@ def initialize_agent():
 
         # Initialize agent with LLM configuration
         agent = Agent(
+            name=agent_name,
             knowledge=knowledge_base,
             search_knowledge=True if knowledge_base else False,
             model="gpt-4o",
@@ -126,46 +125,20 @@ async def chat(message: Message):
     """Chat endpoint for the agent."""
     logger.info(f"Received message: {message.content}")
 
-    # Use the agent to generate a response if available
     try:
-        # Get response from the agent
-        agent_response = agent.print_response(message.content)
-        logger.info(f"Agent response: {agent_response}")
-        return Response(content=agent_response)
+        if agent is None:
+            raise HTTPException(status_code=503, detail="Agent not initialized")
+
+        # Get response from the agent - handle response as plain string
+        response_text = agent.print_response(message.content)
+        if response_text is None:
+            raise HTTPException(status_code=500, detail="No response from agent")
+
+        logger.info(f"Agent response: {response_text}")
+        return Response(content=str(response_text))
     except Exception as e:
         logger.error(f"Error getting response from agent: {str(e)}")
-        # Fall back to echo response if there's an error
-        return Response(content=f"Error: {str(e)}")
-
-
-@app.post("/query")
-async def query(query_data: Query):
-    """Direct query endpoint for the agent."""
-    logger.info(f"Received query: {query_data.query}")
-
-    # Use the agent to generate a response if available
-    try:
-        # Get response from the agent
-        agent_response = agent.print_response(query_data.query)
-        logger.info(f"Agent response to query: {agent_response}")
-        return {"response": agent_response}
-    except Exception as e:
-        logger.error(f"Error getting response from agent for query: {str(e)}")
-        # Return error message
-        return {"error": str(e)}
-
-
-@app.get("/info")
-async def info():
-    """Info endpoint for the agent."""
-    # Get environment variables
-    env_vars = {k: v for k, v in os.environ.items() if not k.startswith("_")}
-
-    return {
-        "agent_type": os.environ.get("AGENT_TYPE", "chat"),
-        "model": os.environ.get("MODEL", "gpt-3.5-turbo"),
-        "env_vars": env_vars,
-    }
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

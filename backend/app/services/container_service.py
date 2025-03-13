@@ -183,7 +183,7 @@ class ContainerService:
             model_config = agent.config.get("model", {})
             if model_config:
                 env_vars["LLM_PROVIDER"] = model_config.get("provider", "openai")
-                env_vars["LLM_MODEL"] = model_config.get("name", "gpt-3.5-turbo")
+                env_vars["LLM_MODEL"] = model_config.get("name", "gpt-4o")
                 # Add API key if available
                 if "api_key" in model_config:
                     env_vars["LLM_API_KEY"] = model_config["api_key"]
@@ -194,18 +194,25 @@ class ContainerService:
                 kb_config = agent.config.get("knowledge_base", {})
 
                 # Set knowledge path to the mounted directory in the container
-                env_vars["KNOWLEDGE_PATH"] = "/app/data/pdfs"
+                env_vars["KNOWLEDGE_PATH"] = "data/pdfs/docs"
 
                 # Set vector database configuration
                 # Get the vector database URL from environment or use a default
-                vector_db_url = os.getenv("VECTOR_DB_URL", "postgresql://postgres:postgres@localhost:5432/warder")
-                
+                vector_db_url = os.getenv(
+                    "VECTOR_DB_URL",
+                    "postgresql://postgres:postgres@localhost:5432/warder",
+                )
+
                 # For Podman on macOS, we need to use the special hostname
                 if "localhost" in vector_db_url or "127.0.0.1" in vector_db_url:
                     # Replace localhost with host.containers.internal for Podman
-                    vector_db_url = vector_db_url.replace("localhost", "host.containers.internal")
-                    vector_db_url = vector_db_url.replace("127.0.0.1", "host.containers.internal")
-                
+                    vector_db_url = vector_db_url.replace(
+                        "localhost", "host.containers.internal"
+                    )
+                    vector_db_url = vector_db_url.replace(
+                        "127.0.0.1", "host.containers.internal"
+                    )
+
                 env_vars["VECTOR_DB_URL"] = vector_db_url
                 # Create a table name for this agent
                 table_name = f"pdf_documents_{agent.id}".replace("-", "_")
@@ -230,13 +237,13 @@ class ContainerService:
 
             # Use the default network for better connectivity
             cmd.extend(["--network", DEFAULT_NETWORK])
-            
+
             # Add port mapping for the container
             # Find an available port
             host_port = self._find_available_port()
             # Map to port 8080 which is what the agent is using
             cmd.extend(["-p", f"{host_port}:8080/tcp"])
-            
+
             # Debug output for troubleshooting
             logger.info(f"Container create command: {' '.join(cmd)}")
 
