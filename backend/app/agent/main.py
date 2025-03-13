@@ -132,16 +132,22 @@ async def chat(message: Message):
         if agent is None:
             raise HTTPException(status_code=503, detail="Agent not initialized")
 
-        # Get response from the agent - handle response as plain string
+        # Get response from the agent
         logger.info("Getting response from agent")
-        logger.info(f"Message role: {message.content}")
-        logger.info(f"Agent: {agent}")
         response_text = agent.print_response(message.content)
-        if response_text is None:
-            raise HTTPException(status_code=500, detail="No response from agent")
 
+        # Handle None response
+        if response_text is None:
+            response_text = "No response generated from the agent"
+            logger.warning("Agent returned None response")
+
+        # Ensure response is converted to string
+        response_text = str(response_text)
         logger.info(f"Agent response: {response_text}")
-        return Response(content=str(response_text))
+
+        # Return properly formatted response
+        return Response(content=response_text)
+
     except Exception as e:
         logger.error(f"Error getting response from agent: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
