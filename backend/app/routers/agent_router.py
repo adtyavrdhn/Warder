@@ -476,6 +476,64 @@ async def get_agent_stats(agent_id: UUID, db: AsyncSession = Depends(get_db)) ->
         )
 
 
+@router.post("/{agent_id}/chat", status_code=status.HTTP_200_OK)
+async def chat_with_agent(
+    agent_id: UUID,
+    query_data: AgentQuery,
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, str]:
+    """
+    Chat with an agent and get a response.
+
+    Args:
+        agent_id: The agent ID
+        query_data: The query data
+        db: Database session
+
+    Returns:
+        The agent's response
+
+    Raises:
+        HTTPException: If the agent is not found or if there's an error querying the agent
+    """
+    try:
+        logger.info(f"Received request to chat with agent: {agent_id}")
+
+        # Create agent service
+        service = AgentService(db)
+
+        # Check if agent exists
+        agent = await service.get_agent(agent_id)
+        if not agent:
+            logger.warning(f"Agent with ID {agent_id} not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Agent with ID {agent_id} not found",
+            )
+
+        # Get response from agent
+        response = await service.get_agent_response(agent_id, query_data.query)
+
+        # Check if response was generated
+        if response is None:
+            logger.warning(f"Failed to get response from agent {agent_id}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to get response from agent",
+            )
+
+        return {"response": response}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error chatting with agent {agent_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error chatting with agent: {str(e)}",
+        )
+
+
 @router.post("/{agent_id}/query", status_code=status.HTTP_200_OK)
 async def query_agent(
     agent_id: UUID,

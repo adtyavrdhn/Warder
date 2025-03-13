@@ -197,10 +197,16 @@ class ContainerService:
                 env_vars["KNOWLEDGE_PATH"] = "/app/data/pdfs"
 
                 # Set vector database configuration
-                # Use host.docker.internal to access the host from the container
-                env_vars["VECTOR_DB_URL"] = (
-                    "postgresql://postgres:postgres@host.docker.internal:5432/warder"
-                )
+                # Get the vector database URL from environment or use a default
+                vector_db_url = os.getenv("VECTOR_DB_URL", "postgresql://postgres:postgres@localhost:5432/warder")
+                
+                # For Podman on macOS, we need to use the special hostname
+                if "localhost" in vector_db_url or "127.0.0.1" in vector_db_url:
+                    # Replace localhost with host.containers.internal for Podman
+                    vector_db_url = vector_db_url.replace("localhost", "host.containers.internal")
+                    vector_db_url = vector_db_url.replace("127.0.0.1", "host.containers.internal")
+                
+                env_vars["VECTOR_DB_URL"] = vector_db_url
                 # Create a table name for this agent
                 table_name = f"pdf_documents_{agent.id}".replace("-", "_")
                 env_vars["VECTOR_DB_TABLE"] = table_name
@@ -222,13 +228,14 @@ class ContainerService:
             for key, value in env_vars.items():
                 cmd.extend(["-e", f"{key}={value}"])
 
-            # Use bridge network instead of host network for better macOS compatibility
-            cmd.extend(["--network", "bridge"])
+            # Use the default network for better connectivity
+            cmd.extend(["--network", DEFAULT_NETWORK])
             
             # Add port mapping for the container
             # Find an available port
             host_port = self._find_available_port()
-            cmd.extend(["-p", f"{host_port}:8000/tcp"])
+            # Map to port 8080 which is what the agent is using
+            cmd.extend(["-p", f"{host_port}:8080/tcp"])
             
             # Debug output for troubleshooting
             logger.info(f"Container create command: {' '.join(cmd)}")

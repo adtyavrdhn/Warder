@@ -22,13 +22,16 @@ sys.path.append("/app")
 
 # Try to import agno
 try:
-    from agno import Agent, KnowledgeBase
+    from agno.agent import Agent
 
     AGNO_AVAILABLE = True
     logger.info("Agno is available")
-except ImportError:
+except ImportError as e:
     AGNO_AVAILABLE = False
-    logger.warning("Agno is not available. Using fallback mode.")
+    logger.warning(f"Agno is not available. Using fallback mode. Error: {str(e)}")
+except Exception as e:
+    AGNO_AVAILABLE = False
+    logger.warning(f"Error importing Agno: {str(e)}. Using fallback mode.")
 
 # Create FastAPI app
 app = FastAPI(title="Warder Agent", description="API for Warder agent")
@@ -112,16 +115,16 @@ def initialize_agent():
         llm_provider = os.environ.get("LLM_PROVIDER", "")
         llm_model = os.environ.get("LLM_MODEL", "")
         llm_api_key = os.environ.get("LLM_API_KEY", "")
-        
+
         # Initialize agent
         logger.info(
             f"Initializing agent: {agent_name} (ID: {agent_id}, Type: {agent_type})"
         )
-        
+
         # Check if we have LLM configuration
         if llm_provider and llm_model and llm_api_key:
             logger.info(f"Using LLM provider: {llm_provider}, model: {llm_model}")
-            
+
             # Initialize agent with LLM configuration
             agent = Agent(
                 knowledge=knowledge_base,

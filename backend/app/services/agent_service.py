@@ -481,6 +481,7 @@ class AgentService:
                 return None
 
             # Prepare request to container
+            # Try /chat endpoint first
             url = f"http://localhost:{port_mapping}/chat"
             payload = {"content": query}
             
@@ -491,23 +492,46 @@ class AgentService:
             try:
                 async with httpx.AsyncClient(timeout=30.0) as client:
                     logger.info(f"Sending POST request to {url}")
-                    response = await client.post(url, json=payload)
-                    logger.info(f"Response status code: {response.status_code}")
-                    response.raise_for_status()
-                    data = response.json()
-                    logger.info(f"Response data: {data}")
-                    
-                    # Check if the response contains an error
-                    if "error" in data:
-                        logger.error(f"Agent returned an error: {data['error']}")
-                        return None
-                    
-                    # The /chat endpoint returns a Response object with 'content' field
-                    if "content" in data:
-                        return data.get("content")
-                    
-                    # Fallback to the old response format if content is not found
-                    return data.get("response")
+                    try:
+                        response = await client.post(url, json=payload)
+                        logger.info(f"Response status code: {response.status_code}")
+                        response.raise_for_status()
+                        data = response.json()
+                        logger.info(f"Response data: {data}")
+                        
+                        # Check if the response contains an error
+                        if "error" in data:
+                            logger.error(f"Agent returned an error: {data['error']}")
+                            return None
+                        
+                        # The /chat endpoint returns a Response object with 'content' field
+                        if "content" in data:
+                            return data.get("content")
+                        
+                        # Fallback to the old response format if content is not found
+                        return data.get("response")
+                    except (httpx.HTTPStatusError, httpx.RequestError) as e:
+                        # If /chat endpoint fails, try /query endpoint
+                        logger.warning(f"Error with /chat endpoint: {str(e)}. Trying /query endpoint...")
+                        query_url = f"http://localhost:{port_mapping}/query"
+                        query_payload = {"query": query}
+                        
+                        logger.info(f"Sending request to agent container at URL: {query_url}")
+                        logger.info(f"Request payload: {query_payload}")
+                        
+                        query_response = await client.post(query_url, json=query_payload)
+                        logger.info(f"Query response status code: {query_response.status_code}")
+                        query_response.raise_for_status()
+                        query_data = query_response.json()
+                        logger.info(f"Query response data: {query_data}")
+                        
+                        # Check if the response contains an error
+                        if "error" in query_data:
+                            logger.error(f"Agent returned an error: {query_data['error']}")
+                            return None
+                        
+                        # The /query endpoint returns a response field
+                        return query_data.get("response")
             except httpx.HTTPStatusError as e:
                 logger.error(f"HTTP error occurred: {e.response.status_code} - {e.response.text}")
                 return None
@@ -758,9 +782,9 @@ class AgentService:
                 return None
 
             # Parse port mappings from container info
-            # The format is typically: {'8000/tcp': [{'HostIp': '0.0.0.0', 'HostPort': '9123'}]}
+            # The format is typically: {'8080/tcp': [{'HostIp': '0.0.0.0', 'HostPort': '9123'}]}
             ports = info.get("NetworkSettings", {}).get("Ports", {})
-            container_port = "8000/tcp"  # The port exposed by the agent container
+            container_port = "8080/tcp"  # The port exposed by the agent container
 
             if container_port in ports and ports[container_port]:
                 mapping = ports[container_port][0]
