@@ -7,7 +7,9 @@ import json
 import logging
 import uvicorn
 from fastapi import FastAPI, HTTPException
+from agno.agent import Agent
 from pydantic import BaseModel
+from agno.agent import Agent
 import sys
 
 # Configure logging
@@ -17,21 +19,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("warder-agent")
 
-# Add the parent directory to the path so we can import agno
 sys.path.append("/app")
-
-# Try to import agno
-try:
-    from agno.agent import Agent
-
-    AGNO_AVAILABLE = True
-    logger.info("Agno is available")
-except ImportError as e:
-    AGNO_AVAILABLE = False
-    logger.warning(f"Agno is not available. Using fallback mode. Error: {str(e)}")
-except Exception as e:
-    AGNO_AVAILABLE = False
-    logger.warning(f"Error importing Agno: {str(e)}. Using fallback mode.")
 
 # Create FastAPI app
 app = FastAPI(title="Warder Agent", description="API for Warder agent")
@@ -65,13 +53,9 @@ def initialize_agent():
     """Initialize the agent with the configuration from environment variables."""
     global agent
 
-    if not AGNO_AVAILABLE:
-        logger.warning("Cannot initialize Agno agent: Agno is not available")
-        return
-
     try:
         # Get agent configuration from environment variables
-        agent_type = os.environ.get("AGENT_TYPE", "chat")
+        agent_type = os.environ.get("AGENT_TYPE", "rag")
         agent_id = os.environ.get("AGENT_ID", "default")
         agent_name = os.environ.get("AGENT_NAME", "Warder Agent")
 
